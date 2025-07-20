@@ -1,22 +1,49 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import PromptInput from '@/components/PromptInput'
 import CodeEditor from '@/components/CodeEditor'
 import WorkflowVisualization from '@/components/WorkflowVisualization'
 import Settings from '@/components/Settings'
+import { SessionSidebar } from '@/components/SessionSidebar'
+import { ChatInterface } from '@/components/ChatInterface'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
-import { Menu, X, Upload } from 'lucide-react'
+import { Menu, X, Upload, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DeployModal from '@/components/DeployModal'
 import { ToastContainer, useToast } from '@/components/Toast'
 
 export default function Home() {
-  const { workflow } = useWorkflowStore()
+  const { workflow, isMemoryEnabled, sessionId, startNewSession, toggleMemory } = useWorkflowStore()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false)
   const toast = useToast()
+
+  // Initialize session on app load if memory is enabled
+  useEffect(() => {
+    const initializeSession = async () => {
+      if (isMemoryEnabled && !sessionId) {
+        // Check for existing session in localStorage
+        const savedSessionId = localStorage.getItem('current_session_id')
+        if (savedSessionId) {
+          try {
+            // Try to load the saved session
+            const { loadSession } = useWorkflowStore.getState()
+            await loadSession(savedSessionId)
+          } catch (error) {
+            console.error('Failed to load saved session:', error)
+            // If loading fails, start a new session
+            await startNewSession()
+          }
+        } else {
+          // Start a new session
+          await startNewSession()
+        }
+      }
+    }
+
+    initializeSession()
+  }, [isMemoryEnabled, sessionId, startNewSession])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -75,6 +102,27 @@ export default function Home() {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Memory Toggle */}
+          <Button
+            onClick={toggleMemory}
+            variant={isMemoryEnabled ? "default" : "outline"}
+            size="sm"
+            className={`hidden sm:flex ${isMemoryEnabled ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'text-purple-600 border-purple-200 hover:bg-purple-50'}`}
+          >
+            <Brain className="h-4 w-4 mr-2" />
+            {isMemoryEnabled ? 'Memory On' : 'Memory Off'}
+          </Button>
+          
+          {/* Mobile Memory Toggle */}
+          <Button
+            onClick={toggleMemory}
+            variant={isMemoryEnabled ? "default" : "outline"}
+            size="sm"
+            className={`sm:hidden ${isMemoryEnabled ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'text-purple-600 border-purple-200 hover:bg-purple-50'}`}
+          >
+            <Brain className="h-4 w-4" />
+          </Button>
+
           <Button
             onClick={() => setIsDeployModalOpen(true)}
             disabled={!workflow}
@@ -97,10 +145,13 @@ export default function Home() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <div className={`${sidebarOpen ? 'w-80 sm:w-96' : 'w-0'} transition-all duration-300 overflow-hidden bg-white border-r border-gray-200 ${sidebarOpen ? 'fixed sm:relative z-30 h-full' : ''}`}>
-          <div className="h-full p-4 overflow-y-auto">
-            <PromptInput />
+        {/* Chat Sidebar */}
+        <div className={`${sidebarOpen ? 'w-96' : 'w-0'} transition-all duration-300 overflow-hidden bg-white border-r border-gray-200 ${sidebarOpen ? 'fixed sm:relative z-30 h-full' : ''}`}>
+          <div className="h-full flex flex-col">
+            <SessionSidebar />
+            <div className="flex-1 border-t border-gray-200 min-h-0">
+              <ChatInterface />
+            </div>
           </div>
         </div>
 
@@ -120,7 +171,7 @@ export default function Home() {
               <CodeEditor className="h-full" />
             </Panel>
             
-            <PanelResizeHandle className="w-1 bg-gray-200 hover:bg-blue-500 transition-colors hidden sm:block" />
+            <PanelResizeHandle className="w-1 bg-gray-200 hover:bg-blue-500 transition-colors" />
             
             {/* Workflow Graph Panel */}
             <Panel defaultSize={50} minSize={30}>

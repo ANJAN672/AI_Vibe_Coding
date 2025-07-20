@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { WorkflowMemory, ChatMessage } from '@/lib/supabase'
 
 export interface N8nNode {
   id: string
@@ -51,6 +52,14 @@ interface WorkflowStore {
   claudeApiKey: string
   mistralApiKey: string
   
+  // Chat Memory State
+  sessionId: string | null
+  userId: string | null
+  isMemoryEnabled: boolean
+  chatHistory: Array<{ prompt: string; timestamp: string }>
+  isFirstPromptInSession: boolean
+  lastMessageTimestamp: string | null
+  
   // Actions
   setWorkflow: (workflow: N8nWorkflow) => void
   setJsonCode: (code: string) => void
@@ -67,6 +76,14 @@ interface WorkflowStore {
   generateWorkflow: () => Promise<void>
   exportWorkflow: () => void
   importWorkflow: (json: string) => void
+  
+  // Chat Memory Actions
+  startNewSession: () => Promise<void>
+  loadSession: (sessionId: string) => Promise<void>
+  saveCurrentWorkflow: () => Promise<void>
+  clearSession: () => Promise<void>
+  toggleMemory: () => void
+  addChatMessage: (prompt: string) => void
 }
 
 const defaultWorkflow: N8nWorkflow = {
@@ -150,6 +167,14 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       geminiApiKey: "",
       claudeApiKey: "",
       mistralApiKey: "",
+      
+      // Chat Memory State
+      sessionId: null,
+      userId: null,
+      isMemoryEnabled: true,
+      chatHistory: [],
+      isFirstPromptInSession: true,
+      lastMessageTimestamp: null,
 
       // Actions
       setWorkflow: (workflow) => {
@@ -179,13 +204,43 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       setMistralApiKey: (mistralApiKey) => set({ mistralApiKey }),
 
       generateWorkflow: async () => {
-        const { prompt, selectedModel, openaiApiKey, geminiApiKey, claudeApiKey, mistralApiKey } = get()
+        const { 
+          prompt, 
+          selectedModel, 
+          openaiApiKey, 
+          geminiApiKey, 
+          claudeApiKey, 
+          mistralApiKey,
+          workflow: currentWorkflow,
+          isMemoryEnabled,
+          sessionId,
+          userId
+        } = get()
+        
         if (!prompt.trim()) {
           set({ error: "Please enter a workflow description" })
           return
         }
 
         set({ isLoading: true, error: null, streamingText: "" })
+        
+        // Initialize session if memory is enabled and no session exists
+        if (isMemoryEnabled && !sessionId) {
+          await get().startNewSession()
+        }
+
+        // Get updated session info after potential initialization
+        const { sessionId: currentSessionId, userId: currentUserId } = get()
+
+        // Save user message to chat history
+        if (isMemoryEnabled && currentSessionId && currentUserId) {
+          await WorkflowMemory.saveMessage({
+            session_id: currentSessionId,
+            user_id: currentUserId,
+            role: 'user',
+            content: prompt
+          })
+        }
 
         try {
           let apiKey = ""
@@ -209,12 +264,53 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             throw new Error(`${modelName} API key is required. Please add your API key in settings.`)
           }
 
-          const generatedWorkflow = await generateWorkflow(prompt, selectedModel, apiKey)
+          // Determine if we should use incremental building
+          const { isFirstPromptInSession } = get()
+          const isWelcomeWorkflow = currentWorkflow?.name === "Welcome to agen8 vibe coding platform"
+          const shouldUseIncremental = isMemoryEnabled && !isFirstPromptInSession && !isWelcomeWorkflow
+          
+          const generatedWorkflow = await generateWorkflow(
+            prompt, 
+            selectedModel, 
+            apiKey, 
+            shouldUseIncremental ? currentWorkflow : null
+          )
+          
+          // Mark that we've processed the first prompt
+          if (isFirstPromptInSession) {
+            set({ isFirstPromptInSession: false })
+          }
+          
           set({ 
             workflow: generatedWorkflow,
             jsonCode: JSON.stringify(generatedWorkflow, null, 2),
             error: null 
           })
+          
+          // Save to Supabase if memory is enabled
+          const { sessionId: finalSessionId, userId: finalUserId, isFirstPromptInSession: wasFirstPrompt } = get()
+          if (isMemoryEnabled && finalSessionId && finalUserId) {
+            await WorkflowMemory.saveWorkflow(finalSessionId, finalUserId, generatedWorkflow)
+            
+            // Update session name if this was the first prompt
+            if (wasFirstPrompt) {
+              const sessionName = WorkflowMemory.generateSessionName(prompt)
+              await WorkflowMemory.updateSessionName(finalSessionId, finalUserId, sessionName)
+              set({ isFirstPromptInSession: false })
+            }
+            
+            // Save assistant response to chat history
+            await WorkflowMemory.saveMessage({
+              session_id: finalSessionId,
+              user_id: finalUserId,
+              role: 'assistant',
+              content: `Updated workflow: ${generatedWorkflow.name}`,
+              workflow_snapshot: generatedWorkflow
+            })
+            
+            // Update timestamp to trigger chat history refresh
+            set({ lastMessageTimestamp: new Date().toISOString() })
+          }
         } catch (error) {
           set({ 
             error: error instanceof Error ? error.message : 'Failed to generate workflow'
@@ -281,11 +377,135 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           set({ error: "Invalid workflow JSON" })
         }
       },
+      
+      // Chat Memory Actions
+      startNewSession: async () => {
+        const userId = WorkflowMemory.generateUserId()
+        const sessionId = WorkflowMemory.generateSessionId()
+        
+        set({ 
+          userId,
+          sessionId,
+          chatHistory: [],
+          workflow: defaultWorkflow,
+          jsonCode: JSON.stringify(defaultWorkflow, null, 2),
+          isFirstPromptInSession: true, // Reset for new session
+          lastMessageTimestamp: null,
+          error: null // Clear any previous errors
+        })
+        
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('current_session_id', sessionId)
+        }
+        
+        // Save initial workflow to Supabase
+        await WorkflowMemory.createNewSession(sessionId, userId, defaultWorkflow, "New Chat")
+      },
+      
+      loadSession: async (sessionId: string) => {
+        const userId = WorkflowMemory.generateUserId()
+        const session = await WorkflowMemory.getSession(sessionId, userId)
+        
+        if (session) {
+          // Check if session has any messages to determine if this is truly a fresh session
+          const messages = await WorkflowMemory.getChatHistory(sessionId, userId)
+          const isFirstPrompt = messages.length === 0
+          
+          set({
+            sessionId: session.session_id,
+            userId: session.user_id,
+            workflow: session.current_workflow,
+            jsonCode: JSON.stringify(session.current_workflow, null, 2),
+            isFirstPromptInSession: isFirstPrompt,
+            error: null // Clear any previous errors
+          })
+          
+          // Store the loaded session in localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('current_session_id', sessionId)
+          }
+        } else {
+          // If session not found, start a new one
+          await get().startNewSession()
+        }
+      },
+      
+      saveCurrentWorkflow: async () => {
+        const { sessionId, userId, workflow, isMemoryEnabled } = get()
+        
+        if (!isMemoryEnabled || !sessionId || !userId || !workflow) {
+          return
+        }
+        
+        await WorkflowMemory.saveWorkflow(sessionId, userId, workflow)
+      },
+      
+      clearSession: async () => {
+        const { sessionId, userId } = get()
+        
+        if (sessionId && userId) {
+          await WorkflowMemory.deleteSession(sessionId, userId)
+        }
+        
+        set({
+          sessionId: null,
+          userId: null,
+          chatHistory: [],
+          workflow: defaultWorkflow,
+          jsonCode: JSON.stringify(defaultWorkflow, null, 2),
+          isFirstPromptInSession: true, // Reset when clearing
+          lastMessageTimestamp: null,
+          error: null
+        })
+        
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('current_session_id')
+        }
+      },
+      
+      toggleMemory: () => {
+        const { isMemoryEnabled } = get()
+        set({ isMemoryEnabled: !isMemoryEnabled })
+      },
+      
+      addChatMessage: (prompt: string) => {
+        const { chatHistory } = get()
+        set({
+          chatHistory: [
+            ...chatHistory,
+            { prompt, timestamp: new Date().toISOString() }
+          ]
+        })
+      },
     }))
 
 // API function for generating workflows
-async function generateWorkflow(prompt: string, model: AIModel, apiKey: string): Promise<N8nWorkflow> {
-  const SYSTEM_PROMPT = `You are an expert n8n workflow designer. Your task is to convert natural language descriptions into valid n8n workflow JSON.
+async function generateWorkflow(prompt: string, model: AIModel, apiKey: string, existingWorkflow?: N8nWorkflow | null): Promise<N8nWorkflow> {
+  const isIncremental = existingWorkflow && existingWorkflow.nodes.length > 1
+  
+  const SYSTEM_PROMPT = isIncremental 
+    ? `You are an expert n8n workflow designer working in INCREMENTAL mode. You have an existing workflow and need to update it based on new instructions.
+
+INCREMENTAL WORKFLOW BUILDING RULES:
+1. You are given an existing workflow JSON - DO NOT start from scratch
+2. Analyze the current workflow structure and connections
+3. Apply the user's new instruction by ADDING, MODIFYING, or CONNECTING nodes as needed
+4. PRESERVE existing nodes unless explicitly asked to remove/replace them
+5. MAINTAIN all existing connections unless modification is required
+6. When adding new nodes, connect them logically to the existing flow
+7. Update node positions to maintain 350px horizontal spacing
+8. Keep the existing workflow name unless user requests a change
+9. Return the COMPLETE updated workflow JSON (not just changes)
+10. Ensure ALL nodes remain connected - no orphaned nodes
+
+MODIFICATION TYPES:
+- ADD: Insert new nodes and connect them appropriately
+- MODIFY: Update parameters of existing nodes
+- CONNECT: Create new connections between existing nodes
+- REARRANGE: Reposition nodes for better flow
+
+Return ONLY the complete updated workflow JSON.`
+    : `You are an expert n8n workflow designer. Your task is to convert natural language descriptions into valid n8n workflow JSON.
 
 CRITICAL REQUIREMENTS:
 1. Always include a "Start" node as the first node with type "n8n-nodes-base.start"
@@ -294,11 +514,12 @@ CRITICAL REQUIREMENTS:
 4. MANDATORY: Create connections object that connects ALL nodes in sequence
 5. Use the exact n8n connection format with proper node names as keys
 6. Position nodes horizontally with 350px spacing for better visibility
-7. Include realistic parameters for each node type
+7. Include realistic parameters for each node type - NEVER leave required parameters empty
 8. Generate a descriptive workflow name
 9. Return ONLY valid JSON, no explanations or markdown
 10. ENSURE COMPLETE CONNECTIVITY - Every node should have a clear path from Start node
 11. NEVER CREATE ISOLATED NODES - Every node except the last must have outgoing connections
+12. ALWAYS PROVIDE REQUIRED PARAMETERS - Never leave required fields empty or undefined
 
 MANDATORY CONNECTION STRUCTURE:
 "connections": {
@@ -361,11 +582,11 @@ LOGIC & FLOW:
 - n8n-nodes-base.stopAndError (Stop and Error)
 
 COMMUNICATION:
-- n8n-nodes-base.slack (Slack)
-- n8n-nodes-base.discord (Discord)
-- n8n-nodes-base.telegram (Telegram)
-- n8n-nodes-base.emailSend (Send Email)
-- n8n-nodes-base.sms (SMS)
+- n8n-nodes-base.slack (Slack) - REQUIRED: channel="#general", text="Your message here"
+- n8n-nodes-base.discord (Discord) - REQUIRED: webhookUrl, content
+- n8n-nodes-base.telegram (Telegram) - REQUIRED: chatId, text  
+- n8n-nodes-base.emailSend (Send Email) - REQUIRED: to, subject, text
+- n8n-nodes-base.sms (SMS) - REQUIRED: to, message
 
 CLOUD SERVICES:
 - n8n-nodes-base.googleDrive (Google Drive)
@@ -501,13 +722,15 @@ VALIDATION CHECKLIST:
 ✓ Parameters are realistic for each node type
 
 PARAMETER REQUIREMENTS:
-- HTTP Request nodes: ALWAYS include "authentication": "none" parameter
+- Slack nodes: ALWAYS include "channel": "#general", "text": "Your notification message"
+- HTTP Request nodes: ALWAYS include "authentication": "none", "method": "GET", "url": "https://api.example.com"
 - Webhook nodes: ALWAYS include "httpMethod": "POST" and "responseMode": "onReceived"  
-- Email Send nodes: ALWAYS include valid string values for "to", "subject", "text"
+- Email Send nodes: ALWAYS include "to": "user@example.com", "subject": "Subject", "text": "Message"
 - Set nodes: ALWAYS use proper format: {"values": {"string": [{"name": "key", "value": "value"}]}}
-- Function nodes: ALWAYS include "functionCode" parameter with valid JavaScript
-- All select/dropdown parameters must use EXACT values from allowed options
-- No undefined or null parameter values
+- Function nodes: ALWAYS include "functionCode": "return items;"
+- Gmail nodes: ALWAYS include "to": "recipient@example.com", "subject": "Subject", "message": "Body"
+- Google Sheets nodes: ALWAYS include "spreadsheetId": "your_sheet_id", "range": "A1:Z1000"
+- All parameters must be strings or proper data types - NO undefined, null, or empty values
 
 ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
 
@@ -524,7 +747,12 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
         model: 'gpt-4',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `Create an n8n workflow for: ${prompt}` }
+          { 
+            role: 'user', 
+            content: isIncremental 
+              ? `This is an ongoing n8n workflow design session.\n\nThe existing workflow is:\n\`\`\`json\n${JSON.stringify(existingWorkflow, null, 2)}\n\`\`\`\n\nThe user now said: "${prompt}"\n\nUpdate the existing workflow JSON based on this instruction. Do not start over. Only add, modify, or connect nodes as needed. Return valid updated n8n JSON only.`
+              : `Create a fresh n8n workflow for: ${prompt}\n\nThis should be a completely new workflow, ignore any existing workflow structure.`
+          }
         ],
         temperature: 0.7,
         max_tokens: 2000,
@@ -536,7 +764,11 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: `${SYSTEM_PROMPT}\n\nCreate an n8n workflow for: ${prompt}` }]
+          parts: [{ 
+            text: isIncremental 
+              ? `${SYSTEM_PROMPT}\n\nThis is an ongoing n8n workflow design session.\n\nThe existing workflow is:\n\`\`\`json\n${JSON.stringify(existingWorkflow, null, 2)}\n\`\`\`\n\nThe user now said: "${prompt}"\n\nUpdate the existing workflow JSON based on this instruction. Do not start over. Only add, modify, or connect nodes as needed. Return valid updated n8n JSON only.`
+              : `${SYSTEM_PROMPT}\n\nCreate a fresh n8n workflow for: ${prompt}\n\nThis should be a completely new workflow, ignore any existing workflow structure.`
+          }]
         }],
         generationConfig: { temperature: 0.7, maxOutputTokens: 2000 }
       }),
@@ -553,7 +785,12 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
         model: 'claude-3-sonnet-20240229',
         max_tokens: 2000,
         messages: [
-          { role: 'user', content: `${SYSTEM_PROMPT}\n\nCreate an n8n workflow for: ${prompt}` }
+          { 
+            role: 'user', 
+            content: isIncremental 
+              ? `${SYSTEM_PROMPT}\n\nThis is an ongoing n8n workflow design session.\n\nThe existing workflow is:\n\`\`\`json\n${JSON.stringify(existingWorkflow, null, 2)}\n\`\`\`\n\nThe user now said: "${prompt}"\n\nUpdate the existing workflow JSON based on this instruction. Do not start over. Only add, modify, or connect nodes as needed. Return valid updated n8n JSON only.`
+              : `${SYSTEM_PROMPT}\n\nCreate a fresh n8n workflow for: ${prompt}\n\nThis should be a completely new workflow, ignore any existing workflow structure.`
+          }
         ]
       }),
     })
@@ -600,16 +837,39 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
     throw new Error('No workflow generated')
   }
 
+  // Clean up the response to extract JSON
+  let cleanedJson = workflowJson.trim()
+  
+  // Remove markdown code blocks if present
+  cleanedJson = cleanedJson.replace(/^```(?:json)?\s*/gm, '').replace(/\s*```$/gm, '')
+  
+  // Extract JSON from response (find first { to last })
+  const jsonStart = cleanedJson.indexOf('{')
+  const jsonEnd = cleanedJson.lastIndexOf('}')
+  
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    cleanedJson = cleanedJson.slice(jsonStart, jsonEnd + 1)
+  }
+
   // Parse and validate the JSON
   let workflow: N8nWorkflow
   try {
-    workflow = JSON.parse(workflowJson)
+    workflow = JSON.parse(cleanedJson)
   } catch (parseError) {
-    const jsonMatch = workflowJson.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      workflow = JSON.parse(jsonMatch[0])
-    } else {
-      throw new Error('Invalid JSON generated by AI')
+    console.error('JSON Parse Error:', parseError)
+    console.error('Raw response:', workflowJson)
+    console.error('Cleaned JSON:', cleanedJson)
+    
+    // Try to fix common JSON issues
+    let fixedJson = cleanedJson
+      .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+      .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Quote unquoted keys
+      .replace(/:\s*'([^']*)'/g, ': "$1"') // Replace single quotes with double quotes
+    
+    try {
+      workflow = JSON.parse(fixedJson)
+    } catch (secondError) {
+      throw new Error(`Invalid JSON generated by AI. Parse error: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`)
     }
   }
 
