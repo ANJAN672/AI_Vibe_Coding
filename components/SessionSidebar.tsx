@@ -19,7 +19,8 @@ export function SessionSidebar() {
     userId, 
     isMemoryEnabled,
     startNewSession,
-    loadSession
+    loadSession,
+    lastMessageTimestamp
   } = useWorkflowStore()
 
   const [sessions, setSessions] = useState<ChatWorkflow[]>([])
@@ -47,7 +48,7 @@ export function SessionSidebar() {
     }
 
     loadSessions()
-  }, [userId, isMemoryEnabled, sessionId])
+  }, [userId, isMemoryEnabled, sessionId, lastMessageTimestamp]) // Add lastMessageTimestamp to refresh when titles update
 
   const handleNewSession = async () => {
     setIsLoading(true)

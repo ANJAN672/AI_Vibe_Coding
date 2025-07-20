@@ -22,13 +22,33 @@ export function ChatInterface() {
     setPrompt,
     generateWorkflow,
     isLoading,
-    lastMessageTimestamp
+    lastMessageTimestamp,
+    selectedModel,
+    error: workflowError,
+    openaiApiKey,
+    geminiApiKey,
+    claudeApiKey,
+    mistralApiKey
   } = useWorkflowStore()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  
+  // Check if current model has API key
+  const getApiKeyForCurrentModel = () => {
+    switch (selectedModel) {
+      case 'openai': return openaiApiKey
+      case 'gemini': return geminiApiKey
+      case 'claude': return claudeApiKey
+      case 'mistral': return mistralApiKey
+      default: return ''
+    }
+  }
+  
+  const hasApiKey = !!getApiKeyForCurrentModel()
+  const currentApiKey = getApiKeyForCurrentModel()
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -85,25 +105,40 @@ export function ChatInterface() {
     e.preventDefault()
     if (!prompt.trim() || isLoading) return
     
-    // Store the prompt before clearing
+    // Store the prompt and validate
     const currentPrompt = prompt.trim()
     
-    // Clear the input immediately for better UX
-    setPrompt('')
-    
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = '60px'
+    if (!currentPrompt) {
+      alert('❌ Please enter a workflow description')
+      return
     }
     
-    // Generate workflow with the stored prompt
+    // Check API key first
+    if (!hasApiKey) {
+      alert(`❌ No ${selectedModel.toUpperCase()} API key found! Please add your API key in settings.`)
+      return
+    }
+    
+    console.log(`🚀 Sending chat with ${selectedModel.toUpperCase()}: "${currentPrompt}"`)
+    
+    // Generate workflow (it reads prompt from store state)
     try {
       await generateWorkflow()
+      console.log('✅ Chat request completed successfully')
+      
+      // Only clear the input after success
+      setPrompt('')
+      
+      // Reset textarea height
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto'
+        textareaRef.current.style.height = '60px'
+      }
     } catch (error) {
-      // If error, restore the prompt
-      setPrompt(currentPrompt)
-      console.error('Failed to generate workflow:', error)
+      console.error('❌ Chat Error:', error)
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      alert(`❌ Chat failed: ${errorMessage}`)
     }
   }
 
@@ -145,9 +180,62 @@ export function ChatInterface() {
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               Ready to Build!
             </h3>
+            
+            {/* API Status */}
+            <div className={`mb-4 px-3 py-1 rounded-full text-sm ${hasApiKey ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {selectedModel.toUpperCase()} API {hasApiKey ? 'Connected ✅' : 'Not Connected ❌'}
+            </div>
+            
+            {!hasApiKey && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-700">
+                  ⚠️ Please add your {selectedModel.toUpperCase()} API key in settings to start chatting
+                </p>
+              </div>
+            )}
+            
+            {workflowError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">❌ {workflowError}</p>
+              </div>
+            )}
             <p className="text-gray-600 text-sm mb-4 px-4">
               Describe your automation workflow below.
             </p>
+            
+            {/* Debug Test Buttons */}
+            {hasApiKey && (
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => {
+                    console.log('🧪 Setting test prompt')
+                    setPrompt('Create a simple email notification workflow')
+                  }}
+                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm"
+                >
+                  🧪 Test Chat
+                </button>
+                
+                {sessionId && userId && (
+                  <button
+                    onClick={async () => {
+                      console.log('🤖 Auto-updating title from chat history...')
+                      const result = await WorkflowMemory.autoUpdateSessionName(sessionId, userId)
+                      console.log(`Auto title update result: ${result}`)
+                      alert(`Title ${result ? 'updated from chat history!' : 'update failed'}`)
+                      
+                      // Refresh the page to show updated title in sidebar
+                      if (result) {
+                        setTimeout(() => window.location.reload(), 1000)
+                      }
+                    }}
+                    className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm"
+                  >
+                    🤖 Auto-Update Title
+                  </button>
+                )}
+              </div>
+            )}
             <div className="space-y-2 text-xs">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">

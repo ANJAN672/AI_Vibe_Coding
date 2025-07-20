@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function SupabaseTest() {
-  const [connectionStatus, setConnectionStatus] = useState<'testing' | 'connected' | 'failed'>('testing')
+  const [connectionStatus, setConnectionStatus] = useState<'testing' | 'connected' | 'failed' | 'hidden'>('testing')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -25,6 +25,11 @@ export default function SupabaseTest() {
         } else {
           console.log('✅ Supabase connection successful!')
           setConnectionStatus('connected')
+          
+          // Auto-hide after 3 seconds
+          setTimeout(() => {
+            setConnectionStatus('hidden')
+          }, 3000)
         }
       } catch (err) {
         console.error('❌ Network error:', err)
@@ -51,6 +56,11 @@ export default function SupabaseTest() {
         <div className="text-red-600 mt-1">{error}</div>
       </div>
     )
+  }
+
+  // Don't render anything if hidden or connected (after timeout)
+  if (connectionStatus === 'hidden') {
+    return null
   }
 
   return (

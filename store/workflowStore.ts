@@ -261,8 +261,11 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
           if (!apiKey) {
             const modelName = selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1)
+            console.error(`❌ No ${modelName} API key found`)
             throw new Error(`${modelName} API key is required. Please add your API key in settings.`)
           }
+          
+          console.log(`🔑 Using ${selectedModel.toUpperCase()} API key: ${apiKey.substring(0, 10)}...`)
 
           // Determine if we should use incremental building
           const { isFirstPromptInSession } = get()
@@ -289,13 +292,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           
           // Save to Supabase if memory is enabled
           const { sessionId: finalSessionId, userId: finalUserId, isFirstPromptInSession: wasFirstPrompt } = get()
+          console.log(`💾 Saving to Supabase - Memory: ${isMemoryEnabled}, Session: ${finalSessionId}, User: ${finalUserId}, First Prompt: ${wasFirstPrompt}`)
+          
           if (isMemoryEnabled && finalSessionId && finalUserId) {
             await WorkflowMemory.saveWorkflow(finalSessionId, finalUserId, generatedWorkflow)
             
-            // Update session name if this was the first prompt
+            // Auto-update session name based on chat history
+            await WorkflowMemory.autoUpdateSessionName(finalSessionId, finalUserId)
+            
+            // Mark that we've processed the first prompt if this was the first one
             if (wasFirstPrompt) {
-              const sessionName = WorkflowMemory.generateSessionName(prompt)
-              await WorkflowMemory.updateSessionName(finalSessionId, finalUserId, sessionName)
               set({ isFirstPromptInSession: false })
             }
             
@@ -736,8 +742,13 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
 
   let response: Response
 
-  if (model === 'openai') {
-    response = await fetch('https://api.openai.com/v1/chat/completions', {
+  console.log(`🤖 Generating workflow with ${model.toUpperCase()}`)
+  console.log('📝 Prompt:', prompt.substring(0, 100) + '...')
+
+  try {
+    if (model === 'openai') {
+      console.log('🔵 Making OpenAI API call...')
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -759,7 +770,8 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
       }),
     })
   } else if (model === 'gemini') {
-    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      console.log('🟡 Making Gemini API call...')
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -815,27 +827,54 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
     throw new Error('Unsupported AI model')
   }
 
-  if (!response.ok) {
-    const errorData = await response.json()
-    throw new Error(`API error: ${errorData.error?.message || errorData.message || 'Unknown error'}`)
+    if (!response.ok) {
+      console.error(`❌ API Error: ${response.status} ${response.statusText}`)
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`
+      
+      try {
+        const errorData = await response.json()
+        errorMessage = `${model.toUpperCase()} API Error: ${errorData.error?.message || errorData.message || errorMessage}`
+        console.error('Error details:', errorData)
+      } catch (e) {
+        console.error('Could not parse error response')
+      }
+      
+      throw new Error(errorMessage)
+    }
+  } catch (error) {
+    console.error(`❌ ${model.toUpperCase()} API call failed:`, error)
+    throw error
   }
 
+  console.log('✅ API call successful, parsing response...')
   const data = await response.json()
+  console.log('📦 Raw API response:', data)
+  
   let workflowJson: string
 
   if (model === 'openai' || model === 'mistral') {
-    workflowJson = data.choices[0]?.message?.content
+    workflowJson = data.choices?.[0]?.message?.content
+    if (!workflowJson) {
+      console.error('❌ No content in OpenAI/Mistral response:', data)
+      throw new Error(`${model.toUpperCase()} returned empty response`)
+    }
   } else if (model === 'gemini') {
-    workflowJson = data.candidates[0]?.content?.parts[0]?.text
+    workflowJson = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!workflowJson) {
+      console.error('❌ No content in Gemini response:', data)
+      throw new Error('Gemini returned empty response')
+    }
   } else if (model === 'claude') {
-    workflowJson = data.content[0]?.text
+    workflowJson = data.content?.[0]?.text
+    if (!workflowJson) {
+      console.error('❌ No content in Claude response:', data)
+      throw new Error('Claude returned empty response')
+    }
   } else {
     throw new Error('Unsupported model response format')
   }
 
-  if (!workflowJson) {
-    throw new Error('No workflow generated')
-  }
+  console.log('📝 Extracted workflow JSON (first 200 chars):', workflowJson.substring(0, 200) + '...')
 
   // Clean up the response to extract JSON
   let cleanedJson = workflowJson.trim()

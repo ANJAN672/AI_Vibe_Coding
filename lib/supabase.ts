@@ -1,17 +1,23 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 // Debug logging for production
 console.log('🚀 Supabase Configuration:')
 console.log('URL:', supabaseUrl ? 'Set ✅' : 'Missing ❌')
 console.log('Key:', supabaseAnonKey ? 'Set ✅' : 'Missing ❌')
+
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('❌ Missing Supabase environment variables!')
+  console.error('Make sure to set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Create Supabase client with fallback values for build time
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+)
 
 // Database types
 export interface ChatWorkflow {
@@ -258,35 +264,212 @@ export class WorkflowMemory {
     }
   }
 
+  // Auto-update session name based on chat history
+  static async autoUpdateSessionName(sessionId: string, userId: string): Promise<boolean> {
+    try {
+      console.log('🤖 Auto-updating session name from chat history...')
+      
+      // Get current session to check if it has a generic name
+      const session = await this.getSession(sessionId, userId)
+      if (!session) return false
+      
+      // Only auto-update if the current name is generic or default
+      const genericNames = ['New Chat', 'New Workflow', 'Welcome to agen8 vibe coding platform']
+      const shouldUpdate = genericNames.some(name => 
+        session.session_name.toLowerCase().includes(name.toLowerCase())
+      ) || session.session_name.startsWith('Updated ')
+      
+      if (!shouldUpdate) {
+        console.log(`📝 Session already has a meaningful name: "${session.session_name}"`)
+        return true
+      }
+      
+      const newName = await this.generateSessionNameFromChat(sessionId, userId)
+      
+      if (newName && newName !== session.session_name) {
+        console.log(`🏷️ Auto-updating title from "${session.session_name}" to "${newName}"`)
+        return await this.updateSessionName(sessionId, userId, newName)
+      }
+      
+      return true
+    } catch (error) {
+      console.error('Error auto-updating session name:', error)
+      return false
+    }
+  }
+
+  // Generate session name from chat history
+  static async generateSessionNameFromChat(sessionId: string, userId: string): Promise<string> {
+    try {
+      const chatHistory = await this.getChatHistory(sessionId, userId)
+      
+      if (chatHistory.length === 0) {
+        return "New Workflow"
+      }
+      
+      // Combine all user messages to get the full context
+      const userMessages = chatHistory
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.content)
+        .join(' ')
+      
+      // Get assistant messages to understand what was built
+      const assistantMessages = chatHistory
+        .filter(msg => msg.role === 'assistant')
+        .map(msg => msg.content)
+        .join(' ')
+      
+      // Extract workflow names from assistant messages
+      const workflowNameMatch = assistantMessages.match(/Updated workflow:\s*([^\.!\n]+)/i)
+      if (workflowNameMatch) {
+        const workflowName = workflowNameMatch[1].trim()
+        if (workflowName && !workflowName.toLowerCase().includes('welcome')) {
+          console.log(`✅ Extracted workflow name from chat: "${workflowName}"`)
+          return workflowName
+        }
+      }
+      
+      // Look for workflow descriptions in assistant messages
+      const workflowDescMatch = assistantMessages.match(/Generated Workflow:\s*([^\n]+)/i)
+      if (workflowDescMatch) {
+        const desc = workflowDescMatch[1].trim()
+        if (desc && !desc.toLowerCase().includes('welcome')) {
+          console.log(`✅ Extracted workflow description: "${desc}"`)
+          return desc
+        }
+      }
+      
+      // Extract action-object patterns from user messages
+      const actionObjectPattern = userMessages.match(/\b(build|create|make|setup)\s+(a\s+)?([^,\.]+?(?:workflow|automation|process|system|integration))/i)
+      if (actionObjectPattern) {
+        let title = actionObjectPattern[3].trim()
+        title = title.replace(/^(a|an|the)\s+/i, '') // Remove articles
+        title = title.charAt(0).toUpperCase() + title.slice(1)
+        console.log(`✅ Extracted from action-object pattern: "${title}"`)
+        return title
+      }
+      
+      // Look for "containing" patterns that describe workflow components
+      const containingMatch = userMessages.match(/\b(?:containing|with|including)\s+([^\.!]+)/i)
+      if (containingMatch) {
+        const components = containingMatch[1]
+          .split(/\s*(?:,|and|then|\+)\s*/)
+          .slice(0, 3) // Take first 3 components
+          .map(comp => comp.trim())
+          .filter(comp => comp.length > 0)
+          .join(' + ')
+        
+        if (components) {
+          console.log(`✅ Extracted from components: "${components} Flow"`)
+          return `${components} Flow`
+        }
+      }
+      
+      // Analyze the conversation to create a meaningful title
+      return this.generateSessionName(userMessages)
+      
+    } catch (error) {
+      console.error('Error generating session name from chat:', error)
+      return "New Workflow"
+    }
+  }
+
   // Generate session name from first user prompt
   static generateSessionName(firstPrompt: string): string {
     if (!firstPrompt) return "New Workflow"
     
+    console.log(`🏷️ Generating session name from: "${firstPrompt}"`)
+    
+    const lowerPrompt = firstPrompt.toLowerCase()
+    
+    // Special patterns for specific workflow types
+    if (lowerPrompt.includes('cold email') || (lowerPrompt.includes('email') && lowerPrompt.includes('cold'))) {
+      if (lowerPrompt.includes('slack') && lowerPrompt.includes('google') && lowerPrompt.includes('telegram')) {
+        return "Cold Email → Slack → Sheets → Telegram"
+      } else if (lowerPrompt.includes('slack') && lowerPrompt.includes('google')) {
+        return "Cold Email → Slack → Google Sheets"
+      } else if (lowerPrompt.includes('slack')) {
+        return "Cold Email → Slack Notification"
+      } else {
+        return "Cold Email Automation"
+      }
+    }
+    
+    // Lead generation workflows
+    if (lowerPrompt.includes('lead') && (lowerPrompt.includes('generation') || lowerPrompt.includes('capture'))) {
+      return "Lead Generation Pipeline"
+    }
+    
+    // CRM workflows
+    if (lowerPrompt.includes('crm') || lowerPrompt.includes('salesforce') || lowerPrompt.includes('hubspot')) {
+      return "CRM Integration Workflow"
+    }
+    
+    // Social media workflows
+    if (lowerPrompt.includes('social') || lowerPrompt.includes('linkedin') || lowerPrompt.includes('twitter') || lowerPrompt.includes('instagram')) {
+      return "Social Media Automation"
+    }
+    
+    // E-commerce workflows
+    if (lowerPrompt.includes('order') || lowerPrompt.includes('payment') || lowerPrompt.includes('stripe') || lowerPrompt.includes('paypal')) {
+      return "E-commerce Automation"
+    }
+    
     // Extract workflow-related keywords for better titles
-    const workflowKeywords = firstPrompt.toLowerCase().match(/\b(email|slack|webhook|api|database|csv|excel|salesforce|google|zapier|automation|workflow|trigger|send|create|update|delete|fetch|sync|schedule|discord|notion|airtable|calendar|form|survey|payment|stripe|paypal)\b/g)
+    const workflowKeywords = lowerPrompt.match(/\b(email|slack|webhook|api|database|csv|excel|salesforce|google|zapier|automation|workflow|trigger|send|create|update|delete|fetch|sync|schedule|discord|notion|airtable|calendar|form|survey|payment|stripe|paypal|instagram|twitter|facebook|linkedin|youtube|tiktok|whatsapp|telegram|sms|push|notification)\b/g)
     
     if (workflowKeywords && workflowKeywords.length > 0) {
       // Use workflow keywords to create meaningful titles
-      const uniqueKeywords = Array.from(new Set(workflowKeywords)).slice(0, 2)
-      return uniqueKeywords.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' & ') + ' Workflow'
+      const uniqueKeywords = Array.from(new Set(workflowKeywords)).slice(0, 3)
+      
+      // Create more natural titles based on keyword combinations
+      if (uniqueKeywords.includes('email') && uniqueKeywords.includes('slack')) {
+        return "Email → Slack Integration"
+      } else if (uniqueKeywords.includes('google') && uniqueKeywords.includes('slack')) {
+        return "Google Sheets → Slack Sync"
+      } else if (uniqueKeywords.includes('webhook') && uniqueKeywords.includes('slack')) {
+        return "Webhook → Slack Notification"
+      } else if (uniqueKeywords.includes('trigger') && uniqueKeywords.length > 1) {
+        const otherKeyword = uniqueKeywords.find(k => k !== 'trigger')
+        if (otherKeyword) {
+          return `${otherKeyword.charAt(0).toUpperCase() + otherKeyword.slice(1)} Trigger Workflow`
+        }
+      } else {
+        const title = uniqueKeywords.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' + ') + ' Flow'
+        console.log(`✅ Generated keyword-based title: "${title}"`)
+        return title
+      }
     }
     
-    // Fallback: use first few words of the prompt
+    // Look for action words to create better titles
+    const actionMatch = firstPrompt.toLowerCase().match(/\b(create|build|make|generate|setup|automate|send|get|fetch|sync|upload|download|process|convert|transform|monitor|track|alert|notify)\b/)
+    const objectMatch = firstPrompt.toLowerCase().match(/\b(workflow|task|email|file|data|report|invoice|lead|contact|order|customer|product|user|message|post|content)\b/)
+    
+    if (actionMatch && objectMatch) {
+      const title = `${actionMatch[0].charAt(0).toUpperCase() + actionMatch[0].slice(1)} ${objectMatch[0].charAt(0).toUpperCase() + objectMatch[0].slice(1)}`
+      console.log(`✅ Generated action-object title: "${title}"`)
+      return title
+    }
+    
+    // Fallback: use first few meaningful words of the prompt
     let name = firstPrompt
       .replace(/[^\w\s]/g, '') // Remove special characters
+      .replace(/\b(create|build|make|a|an|the|for|to|with|using|by|from|and|or|but|in|on|at|is|are|was|were)\b/gi, '') // Remove common words
       .trim()
       .split(' ')
-      .slice(0, 4) // Take first 4 words
+      .filter(word => word.length > 2) // Keep words longer than 2 chars
+      .slice(0, 3) // Take first 3 meaningful words
       .join(' ')
     
-    // Capitalize first letter
-    name = name.charAt(0).toUpperCase() + name.slice(1)
+    // Capitalize first letter of each word
+    name = name.replace(/\b\w/g, l => l.toUpperCase())
     
-    // Add "Workflow" if not present
-    if (!name.toLowerCase().includes('workflow')) {
-      name += ' Workflow'
+    if (!name) {
+      name = firstPrompt.split(' ').slice(0, 3).join(' ')
+      name = name.charAt(0).toUpperCase() + name.slice(1)
     }
     
+    console.log(`✅ Generated fallback title: "${name}"`)
     return name || "New Workflow"
   }
 }
