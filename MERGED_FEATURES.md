@@ -1,4 +1,4 @@
-# AI Vibe Coding Platform - Merged Features
+# agen8 vibe coding platform - Merged Features
 
 ## 🎉 Successfully Merged Frontend Components
 

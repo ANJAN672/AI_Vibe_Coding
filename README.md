@@ -1,4 +1,4 @@
-# AI Vibe Coding Platform - n8n Workflow Generator
+# agen8 vibe coding platform - n8n Workflow Generator
 
 An AI-powered fullstack web platform that generates n8n workflow JSON files from natural language prompts. Built with Next.js, React, and multiple LLM providers.
 

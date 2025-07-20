@@ -42,7 +42,7 @@ async function testAPI(prompt, provider) {
 }
 
 async function runAllTests() {
-  console.log('🚀 Starting AI Vibe Coding Platform Tests...\n');
+  console.log('🚀 Starting agen8 vibe coding platform Tests...\n');
   
   let totalTests = 0;
   let passedTests = 0;

@@ -95,7 +95,9 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
 
       if (response.ok) {
         setDeploymentStatus('success')
-        const successMessage = `Workflow "${workflow.name}" deployed successfully to n8n!`
+        const successMessage = result.editUrl 
+          ? `Workflow "${workflow.name}" deployed successfully! You can edit it at: ${result.editUrl}`
+          : `Workflow "${workflow.name}" deployed successfully to n8n!`
         setDeploymentMessage(successMessage)
         
         // Call success callback
@@ -109,7 +111,7 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
         // Auto-close after success
         setTimeout(() => {
           handleClose()
-        }, 2000)
+        }, 4000) // Give more time to read the URL
       } else {
         setDeploymentStatus('error')
         const errorMessage = result.error || 'Failed to deploy workflow'

@@ -6,7 +6,7 @@ import { Toaster } from 'react-hot-toast'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AI Vibe Coding Platform - n8n Workflow Generator',
+  title: 'agen8 vibe coding platform - n8n Workflow Generator',
   description: 'Generate n8n workflows from natural language prompts with AI-powered automation',
   keywords: ['n8n', 'workflow', 'automation', 'AI', 'no-code', 'low-code'],
   icons: {

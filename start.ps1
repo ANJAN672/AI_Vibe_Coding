@@ -1,5 +1,5 @@
-# AI Vibe Coding Platform Startup Script
-Write-Host "🚀 Starting AI Vibe Coding Platform..." -ForegroundColor Green
+# agen8 vibe coding platform Startup Script
+Write-Host "🚀 Starting agen8 vibe coding platform..." -ForegroundColor Green
 
 # Check if Node.js is installed
 try {

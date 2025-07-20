@@ -70,7 +70,7 @@ interface WorkflowStore {
 }
 
 const defaultWorkflow: N8nWorkflow = {
-  name: "Welcome to AI Vibe Coding Platform",
+  name: "Welcome to agen8 vibe coding platform",
   nodes: [
     {
       id: "start",
@@ -87,7 +87,12 @@ const defaultWorkflow: N8nWorkflow = {
       position: [450, 300],
       parameters: {
         "values": {
-          "message": "Welcome to AI Vibe Coding Platform!"
+          "string": [
+            {
+              "name": "message", 
+              "value": "Welcome to agen8 vibe coding platform!"
+            }
+          ]
         }
       },
       notes: "This is your AI-powered n8n Workflow Generator. Describe your automation and watch the magic happen!"
@@ -453,7 +458,7 @@ EXAMPLE WORKFLOW STRUCTURE (3 CONNECTED NODES):
 EMAIL NODE EXAMPLE (Always include proper parameters for email nodes):
 {
   "id": "email-node",
-  "name": "Send Email",
+  "name": "Send Email", 
   "type": "n8n-nodes-base.emailSend",
   "position": [800, 300],
   "parameters": {
@@ -461,6 +466,28 @@ EMAIL NODE EXAMPLE (Always include proper parameters for email nodes):
     "subject": "Notification from n8n",
     "text": "This is an automated message from your n8n workflow.",
     "from": "noreply@example.com"
+  }
+}
+
+SET NODE EXAMPLE (Always use proper format for Set nodes):
+{
+  "id": "set-node",
+  "name": "Set Values",
+  "type": "n8n-nodes-base.set",
+  "position": [450, 300],
+  "parameters": {
+    "values": {
+      "string": [
+        {
+          "name": "status",
+          "value": "processed"
+        },
+        {
+          "name": "timestamp", 
+          "value": "{{$now}}"
+        }
+      ]
+    }
   }
 }
 
@@ -472,6 +499,15 @@ VALIDATION CHECKLIST:
 ✓ Connections use exact node names as specified in nodes array
 ✓ Positions follow horizontal layout with 350px spacing
 ✓ Parameters are realistic for each node type
+
+PARAMETER REQUIREMENTS:
+- HTTP Request nodes: ALWAYS include "authentication": "none" parameter
+- Webhook nodes: ALWAYS include "httpMethod": "POST" and "responseMode": "onReceived"  
+- Email Send nodes: ALWAYS include valid string values for "to", "subject", "text"
+- Set nodes: ALWAYS use proper format: {"values": {"string": [{"name": "key", "value": "value"}]}}
+- Function nodes: ALWAYS include "functionCode" parameter with valid JavaScript
+- All select/dropdown parameters must use EXACT values from allowed options
+- No undefined or null parameter values
 
 ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
 

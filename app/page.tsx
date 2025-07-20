@@ -67,10 +67,10 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <img 
               src="/favicon.png" 
-              alt="AI Vibe Coding Platform Logo" 
+              alt="agen8 vibe coding platform Logo" 
               className="h-8 w-8 rounded-lg"
             />
-            <h1 className="text-xl font-bold text-gray-900">AI Vibe Coding Platform</h1>
+            <h1 className="text-xl font-bold text-gray-900">agen8 vibe coding platform</h1>
           </div>
         </div>
         
