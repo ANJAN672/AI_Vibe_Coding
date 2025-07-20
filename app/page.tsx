@@ -1,5 +1,8 @@
 'use client'
 
+// Force dynamic rendering for Supabase in production
+export const dynamic = "force-dynamic"
+
 import { useState, useEffect } from 'react'
 import CodeEditor from '@/components/CodeEditor'
 import WorkflowVisualization from '@/components/WorkflowVisualization'
@@ -12,12 +15,20 @@ import { Menu, X, Upload, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import DeployModal from '@/components/DeployModal'
 import { ToastContainer, useToast } from '@/components/Toast'
+import SupabaseTest from '@/components/SupabaseTest'
 
 export default function Home() {
   const { workflow, isMemoryEnabled, sessionId, startNewSession, toggleMemory } = useWorkflowStore()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false)
   const toast = useToast()
+
+  // Debug environment variables for production
+  useEffect(() => {
+    console.log('🌍 Production Environment Check:')
+    console.log('NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Set ✅' : 'Missing ❌')
+    console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Set ✅' : 'Missing ❌')
+  }, [])
 
   // Initialize session on app load if memory is enabled
   useEffect(() => {
@@ -189,6 +200,9 @@ export default function Home() {
         onSuccess={(message) => toast.success('Deployment Successful', message)}
         onError={(message) => toast.error('Deployment Failed', message)}
       />
+
+      {/* Supabase Connection Test */}
+      <SupabaseTest />
 
       {/* Toast Notifications */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />

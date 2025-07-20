@@ -3,6 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+// Debug logging for production
+console.log('🚀 Supabase Configuration:')
+console.log('URL:', supabaseUrl ? 'Set ✅' : 'Missing ❌')
+console.log('Key:', supabaseAnonKey ? 'Set ✅' : 'Missing ❌')
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('❌ Missing Supabase environment variables!')
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Database types
@@ -76,6 +84,8 @@ export class WorkflowMemory {
 
   static async createNewSession(sessionId: string, userId: string, initialWorkflow: any, sessionName: string = "New Chat"): Promise<boolean> {
     try {
+      console.log('🔄 Creating new session:', { sessionId, userId, sessionName })
+      
       const { data, error } = await supabase
         .from('chat_workflows')
         .insert({
@@ -88,9 +98,12 @@ export class WorkflowMemory {
         })
 
       if (error) {
-        console.error('Error creating session:', error)
+        console.error('❌ Supabase Error creating session:', error)
+        console.error('Error details:', { details: error.details, hint: error.hint, message: error.message })
         return false
       }
+      
+      console.log('✅ Session created successfully')
 
       return true
     } catch (error) {
