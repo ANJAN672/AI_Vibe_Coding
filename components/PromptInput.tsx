@@ -49,6 +49,12 @@ export default function PromptInput() {
               id="prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                // Prevent spacebar from being captured by global handlers
+                if (e.key === ' ') {
+                  e.stopPropagation()
+                }
+              }}
               placeholder="Describe what you want to automate..."
               className="min-h-[120px] bg-white border-gray-300 resize-none"
               disabled={isLoading}

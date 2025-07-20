@@ -286,12 +286,14 @@ CRITICAL REQUIREMENTS:
 1. Always include a "Start" node as the first node with type "n8n-nodes-base.start"
 2. EVERY node MUST be connected in a logical sequence - NO orphaned nodes allowed
 3. ALL WORKFLOWS MUST BE FULLY CONNECTED FROM START TO FINISH - Users should see a complete connected workflow immediately
-4. Use the exact n8n connection format with proper node names as keys
-5. Position nodes horizontally with 350px spacing for better visibility
-6. Include realistic parameters for each node type
-7. Generate a descriptive workflow name
-8. Return ONLY valid JSON, no explanations or markdown
-9. ENSURE COMPLETE CONNECTIVITY - Every node should have a clear path from Start node
+4. MANDATORY: Create connections object that connects ALL nodes in sequence
+5. Use the exact n8n connection format with proper node names as keys
+6. Position nodes horizontally with 350px spacing for better visibility
+7. Include realistic parameters for each node type
+8. Generate a descriptive workflow name
+9. Return ONLY valid JSON, no explanations or markdown
+10. ENSURE COMPLETE CONNECTIVITY - Every node should have a clear path from Start node
+11. NEVER CREATE ISOLATED NODES - Every node except the last must have outgoing connections
 
 MANDATORY CONNECTION STRUCTURE:
 "connections": {
@@ -385,7 +387,7 @@ CRM & BUSINESS:
 - n8n-nodes-base.notion (Notion)
 - n8n-nodes-base.trello (Trello)
 
-EXAMPLE WORKFLOW STRUCTURE:
+EXAMPLE WORKFLOW STRUCTURE (3 CONNECTED NODES):
 {
   "name": "Example Workflow",
   "nodes": [
@@ -405,6 +407,17 @@ EXAMPLE WORKFLOW STRUCTURE:
         "method": "GET",
         "url": "https://api.example.com/data"
       }
+    },
+    {
+      "id": "process-node",
+      "name": "Process Data",
+      "type": "n8n-nodes-base.set",
+      "position": [800, 300],
+      "parameters": {
+        "values": {
+          "processed": "true"
+        }
+      }
     }
   ],
   "connections": {
@@ -418,7 +431,36 @@ EXAMPLE WORKFLOW STRUCTURE:
           }
         ]
       ]
+    },
+    "Fetch Data": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+
+EMAIL NODE EXAMPLE (Always include proper parameters for email nodes):
+{
+  "id": "email-node",
+  "name": "Send Email",
+  "type": "n8n-nodes-base.emailSend",
+  "position": [800, 300],
+  "parameters": {
+    "to": "recipient@example.com",
+    "subject": "Notification from n8n",
+    "text": "This is an automated message from your n8n workflow.",
+    "from": "noreply@example.com"
   }
 }
 

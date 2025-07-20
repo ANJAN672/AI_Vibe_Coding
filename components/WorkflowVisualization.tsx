@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { 
-  ReactFlow, 
+  ReactFlow,
+  ReactFlowProvider, 
   Background, 
   Controls, 
   Node, 
@@ -24,12 +25,17 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useWorkflowStore, N8nNode, N8nConnection, N8nWorkflow } from '@/store/workflowStore'
+import NodeEditor from './NodeEditor'
+import WorkflowValidator, { validateWorkflow, ValidationResult } from './WorkflowValidator'
 
 // Custom node component with enhanced styling and information
 const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => {
   const [showDetails, setShowDetails] = useState(false)
   
-  const getNodeColor = (type: string, disabled: boolean) => {
+  const getNodeColor = (type: string, disabled: boolean, hasError?: boolean, hasWarning?: boolean, isDisconnected?: boolean) => {
+    if (hasError) return { bg: '#fef2f2', border: '#dc2626', text: '#991b1b' }
+    if (isDisconnected) return { bg: '#fff7ed', border: '#f97316', text: '#c2410c' }
+    if (hasWarning) return { bg: '#fefce8', border: '#eab308', text: '#a16207' }
     if (disabled) return { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280' }
     
     const typeColors: Record<string, { bg: string; border: string; text: string }> = {
@@ -159,6 +165,7 @@ const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => {
   }
   
   const nodeIcon = getNodeIcon(data.type)
+  const nodeColors = getNodeColor(data.type, data.disabled, data.hasValidationError, data.hasValidationWarning, data.isDisconnected)
 
   return (
     <>
@@ -203,19 +210,40 @@ const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => {
           selected ? 'shadow-xl ring-2 ring-blue-400 ring-opacity-50' : 'shadow-md'
         } ${data.disabled ? 'opacity-60' : ''}`}
         style={{
-          background: `linear-gradient(135deg, ${colors.bg} 0%, ${colors.bg}f0 100%)`,
-          borderColor: colors.border,
-          color: colors.text,
+          background: `linear-gradient(135deg, ${nodeColors.bg} 0%, ${nodeColors.bg}f0 100%)`,
+          borderColor: nodeColors.border,
+          color: nodeColors.text,
           minWidth: '200px',
           maxWidth: '280px',
           boxShadow: selected 
             ? '0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' 
             : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
         }}
-        onDoubleClick={() => setShowDetails(!showDetails)}
+        onDoubleClick={() => {
+          // Trigger edit mode
+          if (data.onEdit) {
+            data.onEdit(data.nodeData)
+          } else {
+            setShowDetails(!showDetails)
+          }
+        }}
       >
-      {/* Status indicators */}
+      {/* Status indicators and Edit button */}
       <div className="absolute -top-1 -right-1 flex gap-1">
+        {/* Edit button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            if (data.onEdit) {
+              data.onEdit(data.nodeData)
+            }
+          }}
+          className="w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors shadow-lg"
+          title="Edit Node"
+        >
+          ✏️
+        </button>
+        
         {data.disabled && (
           <span className="w-3 h-3 bg-gray-400 rounded-full" title="Disabled" />
         )}
@@ -425,12 +453,139 @@ const FlowControls = () => {
   )
 }
 
-export default function WorkflowVisualization() {
+function WorkflowVisualizationInner() {
   const { workflow, setWorkflow } = useWorkflowStore()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editingNode, setEditingNode] = useState<N8nNode | null>(null)
+  const [isNodeEditorOpen, setIsNodeEditorOpen] = useState(false)
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [isSpacePressed, setIsSpacePressed] = useState(false)
+  const reactFlowInstance = useReactFlow()
+
+  // Validation handler
+  const handleValidationResult = useCallback((result: ValidationResult) => {
+    setValidationResult(result)
+  }, [])
+
+  // Spacebar + scroll zoom functionality
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle spacebar if we're not in an input/textarea/contenteditable element
+      const target = event.target as HTMLElement
+      const isInputElement = target?.tagName === 'INPUT' || 
+                            target?.tagName === 'TEXTAREA' || 
+                            target?.contentEditable === 'true'
+      
+      if (event.code === 'Space' && !event.repeat && !isInputElement) {
+        event.preventDefault()
+        setIsSpacePressed(true)
+      }
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement
+      const isInputElement = target?.tagName === 'INPUT' || 
+                            target?.tagName === 'TEXTAREA' || 
+                            target?.contentEditable === 'true'
+                            
+      if (event.code === 'Space' && !isInputElement) {
+        event.preventDefault()
+        setIsSpacePressed(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keyup', handleKeyUp)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
+
+  // Enhanced custom wheel handler for spacebar + scroll zoom
+  const handleWheel = useCallback((event: Event) => {
+    const wheelEvent = event as WheelEvent
+    if (isSpacePressed) {
+      wheelEvent.preventDefault()
+      wheelEvent.stopPropagation()
+      
+      const currentZoom = reactFlowInstance.getZoom()
+      const zoomIn = wheelEvent.deltaY < 0
+      
+      // Use more granular zoom factors for smoother experience
+      const zoomFactor = zoomIn ? 1.05 : 0.95
+      const newZoom = currentZoom * zoomFactor
+      
+      // Respect zoom limits
+      const minZoom = 0.2
+      const maxZoom = 2
+      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom))
+      
+      reactFlowInstance.zoomTo(clampedZoom, {
+        duration: 150
+      })
+    }
+  }, [isSpacePressed, reactFlowInstance])
+
+  // Add wheel event listener to the ReactFlow container
+  useEffect(() => {
+    const reactFlowWrapper = document.querySelector('.react-flow')
+    if (reactFlowWrapper) {
+      reactFlowWrapper.addEventListener('wheel', handleWheel, { passive: false })
+      
+      return () => {
+        reactFlowWrapper.removeEventListener('wheel', handleWheel)
+      }
+    }
+  }, [handleWheel])
+
+  // Node edit handlers
+  const handleEditNode = useCallback((nodeData: N8nNode) => {
+    setEditingNode(nodeData)
+    setIsNodeEditorOpen(true)
+  }, [])
+
+  const handleSaveNode = useCallback((updatedNode: N8nNode) => {
+    if (!workflow) return
+
+    const updatedWorkflow = { ...workflow }
+    const nodeIndex = updatedWorkflow.nodes.findIndex(n => n.id === updatedNode.id)
+    
+    if (nodeIndex !== -1) {
+      // Update the node in the workflow
+      updatedWorkflow.nodes[nodeIndex] = updatedNode
+      
+      // Update connections if node name changed
+      const oldName = workflow.nodes[nodeIndex].name
+      if (oldName !== updatedNode.name) {
+        // Update connections where this node is the source
+        if (updatedWorkflow.connections[oldName]) {
+          updatedWorkflow.connections[updatedNode.name] = updatedWorkflow.connections[oldName]
+          delete updatedWorkflow.connections[oldName]
+        }
+        
+        // Update connections where this node is the target
+        Object.keys(updatedWorkflow.connections).forEach(sourceName => {
+          const sourceConnections = updatedWorkflow.connections[sourceName]
+          Object.keys(sourceConnections).forEach(outputType => {
+            sourceConnections[outputType].forEach(connectionArray => {
+              connectionArray.forEach(connection => {
+                if (connection.node === oldName) {
+                  connection.node = updatedNode.name
+                }
+              })
+            })
+          })
+        })
+      }
+      
+      setWorkflow(updatedWorkflow)
+    }
+  }, [workflow, setWorkflow])
 
   // Define custom node types
   const nodeTypes = useMemo(() => ({
@@ -457,20 +612,30 @@ export default function WorkflowVisualization() {
       // Enhanced auto-layout algorithm for better edge visibility
       const getNodePosition = (index: number, totalNodes: number): [number, number] => {
         // Use horizontal layout for better flow visualization
-        if (totalNodes <= 6) {
+        if (totalNodes <= 5) {
           // Linear horizontal layout for small workflows
-          const spacing = 350 // Increased spacing for better edge visibility
-          return [index * spacing + 100, 300]
+          const spacing = 400 // Increased spacing for better edge visibility
+          return [index * spacing + 150, 300]
+        } else if (totalNodes <= 10) {
+          // Two-row layout for medium workflows
+          const nodesPerRow = Math.ceil(totalNodes / 2)
+          const row = Math.floor(index / nodesPerRow)
+          const col = index % nodesPerRow
+          const horizontalSpacing = 380
+          const verticalSpacing = 300
+          const offsetX = (nodesPerRow - 1) * horizontalSpacing / 2
+
+          return [col * horizontalSpacing - offsetX + 200, row * verticalSpacing + 200]
         } else {
           // Grid layout for larger workflows with more spacing
-          const columns = Math.min(4, Math.ceil(totalNodes / 3)) // Max 4 columns
+          const columns = Math.min(4, Math.ceil(Math.sqrt(totalNodes))) // Dynamic columns based on total nodes
           const row = Math.floor(index / columns)
           const col = index % columns
-          const horizontalSpacing = 350 // Increased horizontal spacing
-          const verticalSpacing = 250   // Increased vertical spacing
+          const horizontalSpacing = 380 // Increased horizontal spacing
+          const verticalSpacing = 280   // Increased vertical spacing
           const offsetX = (columns - 1) * horizontalSpacing / 2
 
-          return [col * horizontalSpacing - offsetX + 100, row * verticalSpacing + 200]
+          return [col * horizontalSpacing - offsetX + 200, row * verticalSpacing + 150]
         }
       }
 
@@ -494,7 +659,12 @@ export default function WorkflowVisualization() {
             continueOnFail: Boolean(n8nNode.continueOnFail),
             retryOnFail: Boolean(n8nNode.retryOnFail),
             maxTries: n8nNode.maxTries || 1,
-            waitBetweenTries: n8nNode.waitBetweenTries || 0
+            waitBetweenTries: n8nNode.waitBetweenTries || 0,
+            nodeData: n8nNode, // Pass the full node data for editing
+            onEdit: handleEditNode, // Pass the edit handler
+            hasValidationError: validationResult?.errors.some(e => e.nodeId === n8nNode.id) || false,
+            hasValidationWarning: validationResult?.warnings.some(w => w.nodeId === n8nNode.id) || false,
+            isDisconnected: validationResult?.disconnectedNodes.includes(n8nNode.id) || false
           },
           type: 'custom',
           draggable: true,
@@ -505,63 +675,33 @@ export default function WorkflowVisualization() {
       const reactFlowEdges: Edge[] = []
       const processedConnections = new Set<string>()
       
-      // Convert n8n connections to React Flow edges with validation
-      Object.entries(workflow.connections).forEach(([sourceNodeName, connections]) => {
-        if (!connections || typeof connections !== 'object') return
-
-        Object.entries(connections).forEach(([outputType, outputConnections]) => {
-          if (!Array.isArray(outputConnections)) return
-
-          outputConnections.forEach((connectionArray, outputIndex) => {
-            if (!Array.isArray(connectionArray)) return
-
-            connectionArray.forEach((connection, connectionIndex) => {
-              if (!connection || typeof connection !== 'object' || !connection.node) return
-
-              const sourceNode = workflow.nodes.find(n => n.name === sourceNodeName)
-              const targetNode = workflow.nodes.find(n => n.name === connection.node)
-              
-              if (!sourceNode || !targetNode) return
-
-              const edgeId = `${sourceNode.id}-${targetNode.id}-${outputIndex}-${connectionIndex}`
-              
-              // Avoid duplicate edges
-              if (processedConnections.has(edgeId)) return
-              processedConnections.add(edgeId)
-
-              reactFlowEdges.push({
-                id: edgeId,
-                source: sourceNode.id,
-                target: targetNode.id,
-                type: 'smoothstep',
-                animated: true, // Always animate for better visual flow
-                style: {
-                  stroke: sourceNode.disabled || targetNode.disabled ? '#9ca3af' : '#4f46e5',
-                  strokeWidth: 6, // Thicker for better visibility
-                  opacity: sourceNode.disabled || targetNode.disabled ? 0.4 : 0.8,
-                  strokeDasharray: sourceNode.disabled || targetNode.disabled ? '8,4' : undefined,
-                },
-                markerEnd: {
-                  type: MarkerType.ArrowClosed,
-                  color: sourceNode.disabled || targetNode.disabled ? '#9ca3af' : '#4f46e5',
-                  width: 26, // Even larger arrow for better visibility
-                  height: 26,
-                },
-                label: outputType !== 'main' ? outputType : undefined,
-                labelStyle: {
-                  fill: '#374151',
-                  fontSize: '12px', // Slightly larger font
-                  fontWeight: '600',
-                },
-                labelBgStyle: {
-                  fill: '#ffffff',
-                  fillOpacity: 0.95,
-                },
-              })
-            })
+      // ALWAYS CREATE SEQUENTIAL CONNECTIONS - This ensures every workflow is fully connected
+      if (reactFlowNodes.length > 1) {
+        // Create sequential connections between all nodes
+        for (let i = 0; i < reactFlowNodes.length - 1; i++) {
+          const sourceNode = reactFlowNodes[i]
+          const targetNode = reactFlowNodes[i + 1]
+          
+          reactFlowEdges.push({
+            id: `auto-${sourceNode.id}-${targetNode.id}`,
+            source: sourceNode.id,
+            target: targetNode.id,
+            type: 'smoothstep',
+            animated: true,
+            style: {
+              stroke: '#4f46e5',
+              strokeWidth: 2,
+              opacity: 0.8,
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: '#4f46e5',
+              width: 10,
+              height: 10,
+            },
           })
-        })
-      })
+        }
+      }
 
       setIsLoading(false)
       return { nodes: reactFlowNodes, edges: reactFlowEdges }
@@ -812,13 +952,13 @@ export default function WorkflowVisualization() {
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{
-          padding: 100, // More padding for better visibility
+          padding: 120, // More padding for better visibility
           includeHiddenNodes: false,
-          minZoom: 0.5,
-          maxZoom: 1.2
+          minZoom: 0.3,
+          maxZoom: 1.0
         }}
         attributionPosition="bottom-left"
-        className="bg-gray-100"
+        className={`bg-gray-100 ${isSpacePressed ? 'cursor-zoom-in' : ''}`}
         nodesDraggable={true}
         nodesConnectable={true}
         elementsSelectable={true}
@@ -829,19 +969,25 @@ export default function WorkflowVisualization() {
         snapToGrid={true}
         snapGrid={[15, 15]}
         connectionMode={ConnectionMode.Loose}
+        panOnScroll={true}
+        panOnScrollSpeed={0.5}
+        zoomOnScroll={!isSpacePressed}
+        zoomOnPinch={true}
+        panOnDrag={!isSpacePressed}
+        selectNodesOnDrag={false}
         defaultEdgeOptions={{
           type: 'smoothstep',
           animated: true,
           style: { 
             stroke: '#4f46e5', 
-            strokeWidth: 6,
-            opacity: 0.8 
+            strokeWidth: 2,
+            opacity: 0.9 
           },
           markerEnd: { 
             type: MarkerType.ArrowClosed, 
             color: '#4f46e5',
-            width: 26,
-            height: 26
+            width: 10,
+            height: 10
           }
         }}
         onNodeDragStop={(event, node) => {
@@ -904,18 +1050,38 @@ export default function WorkflowVisualization() {
         {/* Flow controls with minimap */}
         <FlowControls />
         
-        {/* Instructions Panel */}
-        <Panel position="bottom-left" className="bg-white border border-gray-200 rounded-lg shadow-sm p-3 max-w-xs">
-          <div className="text-xs space-y-1 text-gray-600">
-            <h4 className="font-semibold text-gray-900 mb-2">Workflow Controls</h4>
-            <div>• <strong>Drag</strong> nodes to reposition</div>
-            <div>• <strong>Connect</strong> nodes by dragging from blue (output) to green (input) handles</div>
-            <div>• <strong>Delete</strong> connections by selecting and pressing Delete</div>
-            <div>• <strong>Double-click</strong> nodes for details</div>
-            <div>• <strong>Shift+Click</strong> for multi-select</div>
+
+
+        {/* Workflow Validation - Hidden but still runs validation for node colors */}
+        {workflow && (
+          <div style={{ display: 'none' }}>
+            <WorkflowValidator 
+              workflow={workflow}
+              onValidationResult={handleValidationResult}
+              showVisualFeedback={false}
+            />
           </div>
-        </Panel>
+        )}
       </ReactFlow>
+
+      {/* Node Editor Modal */}
+      <NodeEditor
+        node={editingNode}
+        isOpen={isNodeEditorOpen}
+        onClose={() => {
+          setIsNodeEditorOpen(false)
+          setEditingNode(null)
+        }}
+        onSave={handleSaveNode}
+      />
     </div>
+  )
+}
+
+export default function WorkflowVisualization() {
+  return (
+    <ReactFlowProvider>
+      <WorkflowVisualizationInner />
+    </ReactFlowProvider>
   )
 }
