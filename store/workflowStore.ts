@@ -59,6 +59,7 @@ interface WorkflowStore {
   chatHistory: Array<{ prompt: string; timestamp: string }>
   isFirstPromptInSession: boolean
   lastMessageTimestamp: string | null
+  workflowHistory: Array<{ id: string; name: string; workflow: N8nWorkflow }>
   
   // Actions
   setWorkflow: (workflow: N8nWorkflow) => void
@@ -84,6 +85,7 @@ interface WorkflowStore {
   clearSession: () => Promise<void>
   toggleMemory: () => void
   addChatMessage: (prompt: string) => void
+  loadWorkflowFromHistory: (workflowId: string) => void
 }
 
 const defaultWorkflow: N8nWorkflow = {
@@ -175,6 +177,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       chatHistory: [],
       isFirstPromptInSession: true,
       lastMessageTimestamp: null,
+      workflowHistory: [],
 
       // Actions
       setWorkflow: (workflow) => {
@@ -297,8 +300,13 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           if (isMemoryEnabled && finalSessionId && finalUserId) {
             await WorkflowMemory.saveWorkflow(finalSessionId, finalUserId, generatedWorkflow)
             
-            // Auto-update session name based on chat history
-            await WorkflowMemory.autoUpdateSessionName(finalSessionId, finalUserId)
+            // Update session name directly with the workflow name
+            if (generatedWorkflow.name && !generatedWorkflow.name.toLowerCase().includes('welcome')) {
+              await WorkflowMemory.updateSessionName(finalSessionId, finalUserId, generatedWorkflow.name)
+            } else {
+              // Fallback to auto-update from chat history
+              await WorkflowMemory.autoUpdateSessionName(finalSessionId, finalUserId)
+            }
             
             // Mark that we've processed the first prompt if this was the first one
             if (wasFirstPrompt) {
@@ -483,6 +491,15 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           ]
         })
       },
+      
+      loadWorkflowFromHistory: (workflowId: string) => {
+        const { workflowHistory } = get()
+        const historyItem = workflowHistory.find(item => item.id === workflowId)
+        if (historyItem) {
+          set({ workflow: historyItem.workflow })
+          set({ jsonCode: JSON.stringify(historyItem.workflow, null, 2) })
+        }
+      },
     }))
 
 // API function for generating workflows
@@ -490,11 +507,18 @@ async function generateWorkflow(prompt: string, model: AIModel, apiKey: string, 
   const isIncremental = existingWorkflow && existingWorkflow.nodes.length > 1
   
   const SYSTEM_PROMPT = isIncremental 
-    ? `You are an expert n8n workflow designer working in INCREMENTAL mode. You have an existing workflow and need to update it based on new instructions.
+    ? `You are AGEN8, a professional automation consultant working in INCREMENTAL OPTIMIZATION mode. You're helping improve an existing workflow based on new business requirements.
 
-INCREMENTAL WORKFLOW BUILDING RULES:
+PROFESSIONAL APPROACH:
+- Analyze the current automation like a business consultant
+- Understand the existing process flow and its business purpose
+- Apply improvements that enhance efficiency and value
+- Maintain stability while adding new capabilities
+- Think about the user's evolving business needs
+
+INCREMENTAL WORKFLOW OPTIMIZATION RULES:
 1. You are given an existing workflow JSON - DO NOT start from scratch
-2. Analyze the current workflow structure and connections
+2. Analyze the current workflow structure and connections like a process consultant
 3. Apply the user's new instruction by ADDING, MODIFYING, or CONNECTING nodes as needed
 4. PRESERVE existing nodes unless explicitly asked to remove/replace them
 5. MAINTAIN all existing connections unless modification is required
@@ -504,16 +528,36 @@ INCREMENTAL WORKFLOW BUILDING RULES:
 9. Return the COMPLETE updated workflow JSON (not just changes)
 10. Ensure ALL nodes remain connected - no orphaned nodes
 
-MODIFICATION TYPES:
-- ADD: Insert new nodes and connect them appropriately
-- MODIFY: Update parameters of existing nodes
+OPTIMIZATION TYPES:
+- ADD: Insert new automation steps and connect them appropriately
+- MODIFY: Update parameters of existing nodes for better performance
 - CONNECT: Create new connections between existing nodes
-- REARRANGE: Reposition nodes for better flow
+- REARRANGE: Reposition nodes for better flow visualization
+
+BUSINESS FOCUS:
+- Consider how changes impact overall business efficiency
+- Ensure modifications align with business goals
+- Maintain workflow reliability and error handling
+- Think about scalability and future needs
 
 Return ONLY the complete updated workflow JSON.`
-    : `You are an expert n8n workflow designer. Your task is to convert natural language descriptions into valid n8n workflow JSON.
+    : `You are AGEN8, a professional automation consultant and expert n8n workflow designer. You help businesses streamline their processes through intelligent automation.
 
-CRITICAL REQUIREMENTS:
+PERSONALITY & COMMUNICATION STYLE:
+- Professional yet approachable, like a skilled consultant
+- Focus on business value and practical solutions
+- Explain complex concepts in simple terms
+- Always think about the user's business goals
+- Provide actionable insights and recommendations
+
+YOUR EXPERTISE:
+- Business process automation
+- N8N workflow design and optimization
+- Integration strategies
+- Efficiency improvements
+- Cost reduction through automation
+
+WORKFLOW CREATION REQUIREMENTS:
 1. Always include a "Start" node as the first node with type "n8n-nodes-base.start"
 2. EVERY node MUST be connected in a logical sequence - NO orphaned nodes allowed
 3. ALL WORKFLOWS MUST BE FULLY CONNECTED FROM START TO FINISH - Users should see a complete connected workflow immediately
@@ -526,6 +570,13 @@ CRITICAL REQUIREMENTS:
 10. ENSURE COMPLETE CONNECTIVITY - Every node should have a clear path from Start node
 11. NEVER CREATE ISOLATED NODES - Every node except the last must have outgoing connections
 12. ALWAYS PROVIDE REQUIRED PARAMETERS - Never leave required fields empty or undefined
+
+RESPONSE APPROACH:
+- Think about the business problem first
+- Design workflows that solve real business needs
+- Focus on automation that saves time and reduces manual work
+- Consider scalability and error handling
+- Provide workflows that integrate seamlessly with existing systems
 
 MANDATORY CONNECTION STRUCTURE:
 "connections": {

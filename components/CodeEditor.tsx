@@ -49,10 +49,10 @@ export default function CodeEditor({ className }: CodeEditorProps) {
   }
 
   return (
-    <div className={`flex flex-col h-full bg-white ${className}`}>
+    <div className={`flex flex-col h-full bg-card ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-        <h2 className="text-lg font-semibold text-gray-900">Workflow JSON</h2>
+      <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30 flex-shrink-0">
+        <h2 className="text-lg font-semibold text-foreground">Workflow JSON</h2>
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -86,26 +86,30 @@ export default function CodeEditor({ className }: CodeEditorProps) {
       </div>
 
       {/* Editor */}
-      <div className="flex-1">
+      <div className="flex-1 min-h-0">
         <Editor
           height="100%"
           defaultLanguage="json"
           value={jsonCode}
           onChange={handleEditorChange}
-          theme="vs-light"
+          theme="vs-dark"
           options={{
             minimap: { enabled: false },
+            scrollBeyondLastLine: false,
             fontSize: 14,
             lineNumbers: 'on',
             roundedSelection: false,
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            tabSize: 2,
-            insertSpaces: true,
+            scrollbar: {
+              vertical: 'visible',
+              horizontal: 'visible',
+              useShadows: false,
+              verticalHasArrows: false,
+              horizontalHasArrows: false,
+            },
             wordWrap: 'on',
+            automaticLayout: true,
             formatOnPaste: true,
             formatOnType: true,
-            readOnly: false,
           }}
         />
       </div>

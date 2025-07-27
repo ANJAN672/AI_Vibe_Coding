@@ -339,40 +339,21 @@ const FlowControls = () => {
   
   return (
     <>
-      <Panel position="top-right" className="bg-white rounded-lg shadow-lg p-3 border border-gray-200">
+      <Panel position="top-right" className="flow-controls-panel p-3">
         <div className="flex flex-col gap-2">
           <button
             onClick={() => setShowMiniMap(!showMiniMap)}
-            className="text-xs px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded-md text-blue-700 font-medium transition-colors"
+            className="flow-control-button primary text-xs px-3 py-2 rounded-md font-medium"
           >
             {showMiniMap ? 'Hide' : 'Show'} Minimap
           </button>
           <button
-            onClick={() => fitView({ padding: 100, duration: 800, minZoom: 0.5, maxZoom: 1.2 })}
-            className="text-xs px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-md text-gray-700 font-medium transition-colors"
-          >
-            Fit View
-          </button>
-          <button
             onClick={autoArrangeNodes}
-            className="text-xs px-3 py-2 bg-green-50 hover:bg-green-100 rounded-md text-green-700 font-medium transition-colors"
+            className="flow-control-button success text-xs px-3 py-2 rounded-md font-medium"
+            title="Auto Arrange Workflow"
           >
             Auto Arrange
           </button>
-          <div className="flex gap-1">
-            <button
-              onClick={() => zoomIn({ duration: 300 })}
-              className="text-xs px-2 py-1 bg-gray-50 hover:bg-gray-100 rounded text-gray-700 font-medium"
-            >
-              +
-            </button>
-            <button
-              onClick={() => zoomOut({ duration: 300 })}
-              className="text-xs px-2 py-1 bg-gray-50 hover:bg-gray-100 rounded text-gray-700 font-medium"
-            >
-              -
-            </button>
-          </div>
         </div>
       </Panel>
       
@@ -442,11 +423,7 @@ const FlowControls = () => {
           pannable
           zoomable
           position="bottom-right"
-          className="bg-white border border-gray-200 rounded-lg shadow-lg"
-          style={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #e5e7eb',
-          }}
+          className="react-flow__minimap"
         />
       )}
     </>
@@ -463,7 +440,53 @@ function WorkflowVisualizationInner() {
   const [isNodeEditorOpen, setIsNodeEditorOpen] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [isSpacePressed, setIsSpacePressed] = useState(false)
+  const [showMiniMap, setShowMiniMap] = useState(false)
   const reactFlowInstance = useReactFlow()
+
+  // Spacebar + scroll zoom functionality
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && !event.repeat) {
+        const target = event.target as HTMLElement
+        // Only prevent default if not in an input field
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.contentEditable) {
+          setIsSpacePressed(true)
+          event.preventDefault()
+        }
+      }
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'Space') {
+        setIsSpacePressed(false)
+      }
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (isSpacePressed) {
+        event.preventDefault()
+        event.stopPropagation()
+        
+        const zoomIn = event.deltaY < 0
+        const zoomFactor = zoomIn ? 1.15 : 0.85
+        const currentZoom = reactFlowInstance.getZoom()
+        const newZoom = Math.min(Math.max(currentZoom * zoomFactor, 0.1), 4)
+        
+        reactFlowInstance.zoomTo(newZoom, { duration: 100 })
+      }
+    }
+
+    // Add event listeners to window for global capture
+    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', handleKeyUp, true)
+    window.addEventListener('wheel', handleWheel, { passive: false, capture: true })
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', handleKeyUp, true)
+      window.removeEventListener('wheel', handleWheel, true)
+    }
+  }, [isSpacePressed, reactFlowInstance])
 
   // Validation handler
   const handleValidationResult = useCallback((result: ValidationResult) => {
@@ -905,13 +928,13 @@ function WorkflowVisualizationInner() {
 
   if (error) {
     return (
-      <div className="h-full flex items-center justify-center text-red-500 bg-red-50">
+      <div className="h-full flex items-center justify-center text-destructive bg-destructive/5">
         <div className="text-center">
-          <svg className="w-16 h-16 mx-auto mb-4 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-16 h-16 mx-auto mb-4 text-destructive/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
-          <p className="text-lg font-medium mb-2">Workflow Error</p>
-          <p className="text-sm">{error}</p>
+          <p className="text-lg font-medium mb-2 text-foreground">Workflow Error</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
         </div>
       </div>
     )
@@ -919,25 +942,25 @@ function WorkflowVisualizationInner() {
 
   if (!workflow) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500 bg-gray-50">
+      <div className="h-full flex items-center justify-center text-muted-foreground bg-background">
         <div className="text-center">
-          <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <p className="text-lg font-medium mb-2">No Workflow Generated</p>
-          <p className="text-sm">Enter a prompt above to generate your n8n workflow and see the visual preview here</p>
+          <p className="text-lg font-medium mb-2 text-foreground">No Workflow Generated</p>
+          <p className="text-sm">Enter a prompt in the chat to generate your n8n workflow and see the visual preview here</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full w-full bg-gray-100 relative">
+    <div className="h-full w-full bg-background relative">
       {isLoading && (
-        <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-background/75 flex items-center justify-center z-50">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-600">Converting workflow...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Converting workflow...</p>
           </div>
         </div>
       )}
@@ -958,7 +981,7 @@ function WorkflowVisualizationInner() {
           maxZoom: 1.0
         }}
         attributionPosition="bottom-left"
-        className={`bg-gray-100 ${isSpacePressed ? 'cursor-zoom-in' : ''}`}
+        className={`bg-background ${isSpacePressed ? 'cursor-zoom-in' : ''}`}
         nodesDraggable={true}
         nodesConnectable={true}
         elementsSelectable={true}
@@ -1014,34 +1037,29 @@ function WorkflowVisualizationInner() {
         }}
       >
         <Background 
-          color="#9ca3af"
+          color="hsl(var(--muted-foreground))"
           gap={20}
           size={1}
           variant={BackgroundVariant.Dots}
           style={{
-            backgroundColor: '#f3f4f6',
+            backgroundColor: 'hsl(var(--background))',
           }}
         />
         
-        <Controls 
-          className="bg-white border border-gray-200 rounded-lg shadow-sm"
-          showZoom
-          showFitView
-          showInteractive
-        />
+
         
         {/* Workflow information panel */}
-        <Panel position="top-left" className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+        <Panel position="top-left" className="bg-card border border-border rounded-lg shadow-sm p-4">
           <div className="text-sm space-y-2">
-            <h3 className="font-semibold text-gray-900">
+            <h3 className="font-semibold text-foreground">
               {workflow.name || 'Unnamed Workflow'}
             </h3>
             {workflowStats && (
-              <div className="space-y-1 text-xs text-gray-600">
-                <div>Total Nodes: <span className="font-medium">{workflowStats.totalNodes}</span></div>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <div>Total Nodes: <span className="font-medium text-foreground">{workflowStats.totalNodes}</span></div>
                 <div>Active: <span className="font-medium text-green-600">{workflowStats.activeNodes}</span></div>
-                <div>Disabled: <span className="font-medium text-gray-500">{workflowStats.disabledNodes}</span></div>
-                <div>Connections: <span className="font-medium">{workflowStats.totalConnections}</span></div>
+                <div>Disabled: <span className="font-medium text-muted-foreground">{workflowStats.disabledNodes}</span></div>
+                <div>Connections: <span className="font-medium text-foreground">{workflowStats.totalConnections}</span></div>
               </div>
             )}
           </div>
@@ -1049,6 +1067,16 @@ function WorkflowVisualizationInner() {
 
         {/* Flow controls with minimap */}
         <FlowControls />
+        
+        {/* Spacebar zoom indicator */}
+        {isSpacePressed && (
+          <Panel position="bottom-left" className="bg-primary text-primary-foreground px-3 py-2 rounded-lg shadow-lg">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <span>🔍</span>
+              <span>Scroll to zoom</span>
+            </div>
+          </Panel>
+        )}
         
 
 

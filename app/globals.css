@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    /* Light Mode Colors */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -23,7 +24,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -32,25 +33,26 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    /* Dark Mode Colors - Lovable.dev inspired */
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 216 12.2% 83.9%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -65,29 +67,59 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
+/* Font imports */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar for light mode */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: hsl(var(--muted));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: hsl(var(--muted-foreground) / 0.3);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track {
+  background: hsl(215 27.9% 16.9%);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(217.9 10.6% 64.9% / 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(217.9 10.6% 64.9% / 0.5);
+}
+
+/* Hide scrollbars but keep scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Monaco Editor custom styles */
@@ -101,6 +133,10 @@ body {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+.dark .react-flow__node {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
 /* Hide unwanted overlays and previews */
 .react-flow__node .react-flow__node-resizer,
 .react-flow__node .react-flow__node-toolbar,
@@ -109,13 +145,13 @@ body {
   display: none !important;
 }
 
-/* Enhanced edge styling with n8n-like gray animation */
+/* Enhanced edge styling */
 .react-flow__edge {
   stroke-width: 3;
 }
 
 .react-flow__edge-path {
-  stroke: #6b7280;
+  stroke: hsl(var(--muted-foreground));
   stroke-width: 3;
   stroke-dasharray: 8, 4;
   opacity: 0.9;
@@ -126,14 +162,14 @@ body {
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #374151;
+  stroke: hsl(var(--primary));
   stroke-width: 4;
   stroke-dasharray: 10, 5;
   opacity: 1;
 }
 
 .react-flow__connection-line {
-  stroke: #6b7280;
+  stroke: hsl(var(--muted-foreground));
   stroke-width: 3;
   stroke-dasharray: 8, 4;
   opacity: 0.8;
@@ -142,39 +178,145 @@ body {
 .react-flow__handle {
   width: 12px;
   height: 12px;
-  background: #374151;
-  border: 2px solid #ffffff;
+  background: hsl(var(--background));
+  border: 2px solid hsl(var(--primary));
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .react-flow__handle:hover {
-  background: #1f2937;
+  background: hsl(var(--primary));
   transform: scale(1.1);
 }
 
+/* React Flow Controls - Light and Dark Mode */
 .react-flow__controls {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
 }
 
 .react-flow__controls-button {
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-radius: 6px !important;
+  margin: 2px !important;
 }
 
 .react-flow__controls-button:hover {
-  background: #f9fafb;
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--foreground)) !important;
 }
 
+.react-flow__controls-button:disabled {
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.5 !important;
+}
+
+/* React Flow MiniMap - Light and Dark Mode */
 .react-flow__minimap {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 1px solid #d1d5db;
+  border: 1px solid hsl(var(--border)) !important;
+  background: hsl(var(--card)) !important;
+  border-radius: 8px !important;
 }
 
-@keyframes dashdraw {
-  to {
-    stroke-dashoffset: -10;
-  }
+.dark .react-flow__minimap {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* React Flow Background */
+.react-flow__background {
+  background-color: hsl(var(--background)) !important;
+}
+
+/* React Flow Panel styling */
+.react-flow__panel {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Custom Flow Controls Panel */
+.flow-controls-panel {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.dark .flow-controls-panel {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.flow-control-button {
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.flow-control-button:hover {
+  background: hsl(var(--muted) / 0.8) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.flow-control-button.primary {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border-color: hsl(var(--primary)) !important;
+}
+
+.flow-control-button.primary:hover {
+  background: hsl(var(--primary) / 0.9) !important;
+}
+
+.flow-control-button.success {
+  background: hsl(142 76% 36%) !important;
+  color: white !important;
+  border-color: hsl(142 76% 36%) !important;
+}
+
+.flow-control-button.success:hover {
+  background: hsl(142 76% 30%) !important;
+}
+
+/* Status indicators */
+.status-connected {
+  background: hsl(142 76% 36% / 0.1) !important;
+  color: hsl(142 76% 36%) !important;
+  border: 1px solid hsl(142 76% 36% / 0.2) !important;
+}
+
+.status-disconnected {
+  background: hsl(0 84% 60% / 0.1) !important;
+  color: hsl(0 84% 60%) !important;
+  border: 1px solid hsl(0 84% 60% / 0.2) !important;
+}
+
+.status-warning {
+  background: hsl(38 92% 50% / 0.1) !important;
+  color: hsl(38 92% 50%) !important;
+  border: 1px solid hsl(38 92% 50% / 0.2) !important;
+}
+
+/* Panel resize handle styling */
+[data-panel-resize-handle-enabled] {
+  cursor: col-resize;
+}
+
+[data-panel-resize-handle-enabled]:hover {
+  background-color: hsl(var(--primary)) !important;
+  opacity: 0.8;
+}
+
+[data-panel-resize-handle-enabled]:active {
+  background-color: hsl(var(--primary)) !important;
+  opacity: 1;
 }
 
 @keyframes flow {
@@ -234,33 +376,99 @@ body {
   animation: slide-up 0.8s ease-out;
 }
 
-/* Hide scrollbars but keep scroll functionality */
-.scrollbar-hide {
-  -ms-overflow-style: none;  /* Internet Explorer 10+ */
-  scrollbar-width: none;  /* Firefox */
+/* Improved focus states */
+.focus-visible {
+  @apply outline-none ring-2 ring-ring ring-offset-2;
 }
 
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* WebKit */
+/* Button improvements */
+.btn-primary {
+  @apply bg-primary text-primary-foreground hover:bg-primary/90;
 }
 
-/* Force hide scrollbars for chat areas */
-.chat-scroll {
-  overflow-y: scroll;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+/* Tab improvements */
+.tab-active {
+  @apply border-b-2 border-primary bg-transparent;
 }
 
-.chat-scroll::-webkit-scrollbar {
-  width: 0;
-  background: transparent;
+/* Input improvements */
+input:focus,
+textarea:focus {
+  @apply outline-none ring-2 ring-ring ring-offset-2;
 }
 
-.hide-scrollbar {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
+/* Sidebar improvements */
+.sidebar-item {
+  @apply rounded-lg transition-colors duration-200;
 }
 
-.hide-scrollbar::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
+.sidebar-item:hover {
+  @apply bg-muted/50;
+}
+
+.sidebar-item.active {
+  @apply bg-primary/10 border border-primary/20;
+}
+
+/* Chat message improvements */
+.chat-message {
+  @apply rounded-2xl px-4 py-3;
+}
+
+.chat-message.user {
+  @apply bg-primary text-primary-foreground ml-auto;
+}
+
+.chat-message.assistant {
+  @apply bg-muted/50 text-foreground border border-border/50;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .sidebar-mobile {
+    @apply fixed inset-y-0 left-0 z-50 w-80 transform transition-transform duration-300 ease-in-out;
+  }
+  
+  .sidebar-mobile.closed {
+    @apply -translate-x-full;
+  }
+}
+
+/* Theme transition */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Ensure proper contrast in both modes */
+.light .text-contrast {
+  @apply text-gray-900;
+}
+
+.dark .text-contrast {
+  @apply text-gray-100;
+}
+
+/* Status indicators */
+.status-connected {
+  @apply bg-green-100 text-green-700;
+}
+
+.dark .status-connected {
+  @apply bg-green-900/30 text-green-300;
+}
+
+.status-disconnected {
+  @apply bg-red-100 text-red-700;
+}
+
+.dark .status-disconnected {
+  @apply bg-red-900/30 text-red-300;
+}
+
+.status-warning {
+  @apply bg-yellow-100 text-yellow-700 border-yellow-200;
+}
+
+.dark .status-warning {
+  @apply bg-yellow-900/20 text-yellow-300 border-yellow-800;
 }

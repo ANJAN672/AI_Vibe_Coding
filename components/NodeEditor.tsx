@@ -393,9 +393,9 @@ export default function NodeEditor({ node, isOpen, onClose, onSave }: NodeEditor
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
       {/* Sidebar */}
-      <div className="relative ml-auto w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-md bg-white shadow-xl flex flex-col h-full">
+      <div className="relative ml-auto w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-md bg-background shadow-xl flex flex-col h-full border-l border-border">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-3">
             <div 
               className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-medium"
@@ -404,8 +404,8 @@ export default function NodeEditor({ node, isOpen, onClose, onSave }: NodeEditor
               {nodeConfig.icon}
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{nodeConfig.displayName}</h2>
-              <p className="text-sm text-gray-500">{nodeConfig.description}</p>
+              <h2 className="text-lg font-semibold text-foreground">{nodeConfig.displayName}</h2>
+              <p className="text-sm text-muted-foreground">{nodeConfig.description}</p>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -418,8 +418,8 @@ export default function NodeEditor({ node, isOpen, onClose, onSave }: NodeEditor
           {/* Basic Settings */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Settings className="h-4 w-4 text-gray-500" />
-              <h3 className="text-sm font-semibold text-gray-900">Basic Settings</h3>
+              <Settings className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">Basic Settings</h3>
             </div>
             
             {/* Node Name */}
@@ -471,8 +471,8 @@ export default function NodeEditor({ node, isOpen, onClose, onSave }: NodeEditor
               <Separator />
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Info className="h-4 w-4 text-gray-500" />
-                  <h3 className="text-sm font-semibold text-gray-900">Parameters</h3>
+                  <Info className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-foreground">Parameters</h3>
                 </div>
                 {nodeConfig.fields.map(renderField)}
               </div>
@@ -480,9 +480,9 @@ export default function NodeEditor({ node, isOpen, onClose, onSave }: NodeEditor
           )}
 
           {/* Node Type Badge */}
-          <div className="pt-4 border-t border-gray-100">
+          <div className="pt-4 border-t border-border">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">Node Type</span>
+              <span className="text-sm text-muted-foreground">Node Type</span>
               <Badge variant="secondary" className="font-mono text-xs">
                 {editedNode.type}
               </Badge>
@@ -491,7 +491,7 @@ export default function NodeEditor({ node, isOpen, onClose, onSave }: NodeEditor
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200 flex gap-2">
+        <div className="p-4 border-t border-border flex gap-2">
           <Button variant="outline" onClick={onClose} className="flex-1">
             Cancel
           </Button>

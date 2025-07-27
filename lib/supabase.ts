@@ -319,13 +319,21 @@ export class WorkflowMemory {
         .map(msg => msg.content)
         .join(' ')
       
-      // Extract workflow names from assistant messages
-      const workflowNameMatch = assistantMessages.match(/Updated workflow:\s*([^\.!\n]+)/i)
-      if (workflowNameMatch) {
-        const workflowName = workflowNameMatch[1].trim()
-        if (workflowName && !workflowName.toLowerCase().includes('welcome')) {
-          console.log(`✅ Extracted workflow name from chat: "${workflowName}"`)
-          return workflowName
+      // Extract workflow names from assistant messages (try multiple patterns)
+      const workflowNamePatterns = [
+        /Updated workflow:\s*([^\.!\n]+)/i,
+        /Generated Workflow:\s*([^\.!\n\(]+)/i,
+        /Workflow Updated.*?Generated Workflow:\s*([^\.!\n\(]+)/i
+      ]
+      
+      for (const pattern of workflowNamePatterns) {
+        const workflowNameMatch = assistantMessages.match(pattern)
+        if (workflowNameMatch) {
+          const workflowName = workflowNameMatch[1].trim()
+          if (workflowName && !workflowName.toLowerCase().includes('welcome')) {
+            console.log(`✅ Extracted workflow name from chat: "${workflowName}"`)
+            return workflowName
+          }
         }
       }
       

@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
@@ -34,15 +35,16 @@ export default function RootLayout({
         <link rel="shortcut icon" type="image/png" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/favicon.png" />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} bg-background text-foreground`}>
         {children}
         <Toaster 
           position="top-right"
           toastOptions={{
             duration: 4000,
             style: {
-              background: '#363636',
-              color: '#fff',
+              background: 'hsl(var(--card))',
+              color: 'hsl(var(--foreground))',
+              border: '1px solid hsl(var(--border))',
             },
           }}
         />
