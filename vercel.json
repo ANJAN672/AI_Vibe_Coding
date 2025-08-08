@@ -8,6 +8,32 @@
     },
     "app/api/debug-supabase/route.ts": {
       "maxDuration": 10
+    },
+    "app/api/health/route.ts": {
+      "maxDuration": 5
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/docs/(.*)",
+      "destination": "/docs/$1"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/documentation",
+      "destination": "/docs",
+      "permanent": true
+    }
+  ]
 }

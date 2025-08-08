@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * Deployment Verification Script
+ * AGEN8 Deployment Verification Script
  * Run this script to verify your deployment is working correctly
+ * 
+ * Usage: node scripts/verify-deployment.js [URL]
+ * Example: node scripts/verify-deployment.js https://agen8.vercel.app
  */
 
 const https = require('https');
 const http = require('http');
 
-const DEPLOYMENT_URL = process.argv[2] || 'https://your-app.vercel.app';
+const DEPLOYMENT_URL = process.argv[2] || 'http://localhost:3000';
 
+console.log('🚀 AGEN8 Deployment Verification');
 console.log('🔍 Verifying deployment at:', DEPLOYMENT_URL);
 console.log('=' .repeat(60));
 

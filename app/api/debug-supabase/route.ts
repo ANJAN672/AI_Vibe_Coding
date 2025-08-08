@@ -76,10 +76,8 @@ export async function GET() {
 }
 
 // Test write functionality
-export async function POST(request: Request) {
+export async function POST(_request: Request) {
   try {
-    const body = await request.json()
-    
     console.log('🧪 Debug API - Testing Supabase Write')
     
     // Create a test session

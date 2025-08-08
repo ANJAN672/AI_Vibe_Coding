@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { WorkflowMemory, ChatMessage } from '@/lib/supabase'
+import { WorkflowMemory } from '@/lib/supabase'
 
 export interface N8nNode {
   id: string
@@ -216,8 +216,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           mistralApiKey,
           workflow: currentWorkflow,
           isMemoryEnabled,
-          sessionId,
-          userId
+          sessionId
         } = get()
         
         if (!prompt.trim()) {
@@ -1032,25 +1031,28 @@ ENSURE COMPLETE CONNECTIVITY - NO ISOLATED NODES!`
         const currentNode = workflow.nodes[i]
         const nextNode = workflow.nodes[i + 1]
         
-        if (!workflow.connections[currentNode.name]) {
-          workflow.connections[currentNode.name] = {}
-        }
-        
-        if (!workflow.connections[currentNode.name].main) {
-          workflow.connections[currentNode.name].main = []
-        }
-        
-        // Only add connection if it doesn't exist
-        const connectionExists = workflow.connections[currentNode.name].main.some(connArray =>
-          connArray.some(conn => conn.node === nextNode.name)
-        )
-        
-        if (!connectionExists) {
-          workflow.connections[currentNode.name].main.push([{
-            node: nextNode.name,
-            type: 'main',
-            index: 0
-          }])
+        if (currentNode && nextNode) {
+          if (!workflow.connections[currentNode.name]) {
+            workflow.connections[currentNode.name] = {}
+          }
+          
+          const currentConnection = workflow.connections[currentNode.name]
+          if (currentConnection && !currentConnection.main) {
+            currentConnection.main = []
+          }
+          
+          // Only add connection if it doesn't exist
+          const connectionExists = currentConnection?.main?.some(connArray =>
+            connArray.some(conn => conn.node === nextNode.name)
+          )
+          
+          if (!connectionExists && currentConnection?.main) {
+            currentConnection.main.push([{
+              node: nextNode.name,
+              type: 'main',
+              index: 0
+            }])
+          }
         }
       }
     }

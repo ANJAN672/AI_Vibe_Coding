@@ -5,27 +5,123 @@ interface DeploymentRequest {
   workflow: N8nWorkflow
   credentials: {
     hostUrl: string
-    email: string
-    password: string
-  }
-}
-
-interface N8nAuthResponse {
-  data: {
-    id: string
-    email: string
-    firstName: string
-    lastName: string
+    apiKey: string
   }
 }
 
 interface N8nWorkflowResponse {
-  data: {
+  data?: {
     id: string
     name: string
     active: boolean
     createdAt: string
     updatedAt: string
+  }
+  // n8n might return data directly without wrapper
+  id?: string
+  name?: string
+  active?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface N8nHealthResponse {
+  status: string
+  version?: string
+}
+
+// Helper function to test n8n connection
+async function testN8nConnection(hostUrl: string, apiKey?: string): Promise<{ success: boolean; error?: string; version?: string }> {
+  try {
+    const healthUrl = `${hostUrl}/healthz`
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    
+    const response = await fetch(healthUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        ...(apiKey && { 'X-N8N-API-KEY': apiKey })
+      },
+      signal: controller.signal
+    })
+    
+    clearTimeout(timeoutId)
+
+    if (response.ok) {
+      const data = await response.json() as N8nHealthResponse
+      return { 
+        success: true, 
+        ...(data.version && { version: data.version })
+      }
+    } else {
+      return { success: false, error: `Health check failed: ${response.status}` }
+    }
+  } catch (error) {
+    return { success: false, error: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
+  }
+}
+
+// Helper function to authenticate with n8n using API key
+async function authenticateWithApiKey(hostUrl: string, apiKey: string): Promise<{ success: boolean; error?: string; userId?: string }> {
+  try {
+    // Try multiple endpoints to get user information and validate API key
+    const endpoints = [
+      `${hostUrl}/api/v1/me`,
+      `${hostUrl}/api/v1/users/me`, 
+      `${hostUrl}/api/v1/workflows?limit=1`
+    ]
+    
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`Trying authentication endpoint: ${endpoint}`)
+        
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000)
+        
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'X-N8N-API-KEY': apiKey
+          },
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`Authentication successful via ${endpoint}:`, data)
+          
+          // Extract user ID if available
+          let userId = undefined
+          if (data.id) {
+            userId = data.id
+          } else if (data.data && data.data.length > 0 && endpoint.includes('workflows')) {
+            // For workflows endpoint, we can infer the API key works
+            console.log('API key validated via workflows endpoint')
+          }
+          
+          return { success: true, userId }
+        } else if (response.status === 401) {
+          console.log(`Authentication failed at ${endpoint}: Invalid API key`)
+          continue // Try next endpoint
+        } else {
+          console.log(`Endpoint ${endpoint} returned status ${response.status}`)
+          continue // Try next endpoint
+        }
+      } catch (error) {
+        console.log(`Error with endpoint ${endpoint}:`, error)
+        continue // Try next endpoint
+      }
+    }
+    
+    // If all endpoints failed
+    return { success: false, error: 'Invalid API key or n8n instance not accessible' }
+    
+  } catch (error) {
+    return { success: false, error: `API key validation error: ${error instanceof Error ? error.message : 'Unknown error'}` }
   }
 }
 
@@ -42,9 +138,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!credentials.hostUrl || !credentials.email || !credentials.password) {
+    if (!credentials.hostUrl) {
       return NextResponse.json(
-        { error: 'Missing required credentials (hostUrl, email, password)' },
+        { error: 'Missing required hostUrl' },
+        { status: 400 }
+      )
+    }
+
+    // Check if we have API key (only authentication method supported)
+    if (!credentials.apiKey || credentials.apiKey.trim() === '') {
+      return NextResponse.json(
+        { error: 'n8n API key is required. Please create an API key in n8n: Settings → n8n API → Create API Key' },
         { status: 400 }
       )
     }
@@ -60,93 +164,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 1: Authenticate with n8n
-    const loginUrl = `${n8nUrl.origin}/rest/login`
-    
-    const authPayload = {
-      emailOrLdapLoginId: credentials.email,
-      password: credentials.password,
-    }
-    
-    console.log('Attempting authentication with n8n:', loginUrl)
-    console.log('Auth payload keys:', Object.keys(authPayload))
-    
-    let authResponse: Response
-    try {
-      authResponse = await fetch(loginUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(authPayload),
-      })
-    } catch (error) {
-      console.error('Network error during authentication:', error)
+    console.log('Testing n8n connection:', n8nUrl.origin)
+
+    // Step 1: Test connection to n8n instance
+    const connectionTest = await testN8nConnection(n8nUrl.origin, credentials.apiKey)
+    if (!connectionTest.success) {
       return NextResponse.json(
-        { error: 'Unable to connect to n8n instance. Please check the host URL.' },
+        { error: `Unable to connect to n8n instance: ${connectionTest.error}` },
         { status: 500 }
       )
     }
 
-    if (!authResponse.ok) {
-      let errorText = ''
-      let errorData: any = null
-      
-      try {
-        errorText = await authResponse.text()
-        // Try to parse as JSON for better error details
-        if (errorText) {
-          try {
-            errorData = JSON.parse(errorText)
-          } catch {
-            // If not JSON, keep as text
-          }
-        }
-      } catch (e) {
-        console.error('Error reading auth response:', e)
-      }
-      
-      console.error('Authentication failed:', authResponse.status, errorText)
-      
-      if (authResponse.status === 401) {
-        return NextResponse.json(
-          { error: 'Invalid email or password' },
-          { status: 401 }
-        )
-      } else if (authResponse.status === 404) {
-        return NextResponse.json(
-          { error: 'n8n instance not found. Please check the host URL.' },
-          { status: 404 }
-        )
-      } else if (authResponse.status === 400) {
-        // Better handling for 400 errors with detailed message
-        const detailMsg = errorData ? JSON.stringify(errorData) : errorText
-        return NextResponse.json(
-          { error: `Authentication failed: ${authResponse.status} ${detailMsg}` },
-          { status: authResponse.status }
-        )
-      } else {
-        return NextResponse.json(
-          { error: `Authentication failed: ${authResponse.status}` },
-          { status: authResponse.status }
-        )
-      }
-    }
+    console.log('n8n connection successful, version:', connectionTest.version)
 
-    // Extract session cookie from response
-    const setCookieHeader = authResponse.headers.get('set-cookie')
-    if (!setCookieHeader) {
+    // Step 2: Authenticate with n8n using API key
+    console.log('Using API key authentication')
+    const apiKeyAuth = await authenticateWithApiKey(n8nUrl.origin, credentials.apiKey)
+    if (!apiKeyAuth.success) {
       return NextResponse.json(
-        { error: 'No session cookie received from n8n' },
-        { status: 500 }
+        { error: apiKeyAuth.error || 'API key authentication failed' },
+        { status: 401 }
       )
     }
+    
+    console.log('Authentication successful, user ID:', apiKeyAuth.userId)
+    
+    const authHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-N8N-API-KEY': credentials.apiKey
+    }
 
-    // Parse the session cookie
-    const sessionCookie = setCookieHeader.split(';')[0] // Get the first cookie (usually n8n-auth)
-
-    // Step 2: Prepare workflow for n8n
+    // Step 3: Prepare workflow for n8n (exclude read-only fields like 'active' and 'tags')
     const n8nWorkflow = {
       name: workflow.name || 'Deployed Workflow',
       nodes: workflow.nodes.map((node, index) => {
@@ -237,30 +286,30 @@ export async function POST(request: NextRequest) {
         }
       }),
       connections: workflow.connections || {},
-      active: Boolean(workflow.active),
+      // Remove 'active' and 'tags' fields as they are read-only - we'll handle activation separately
       settings: {
         executionOrder: 'v1',
         ...(workflow.settings || {})
       },
-      tags: Array.isArray(workflow.tags) ? workflow.tags : [],
       ...(workflow.staticData && { staticData: workflow.staticData }),
     }
+    
+    // Store the desired active state for later activation
+    const shouldActivate = Boolean(workflow.active)
 
     // Log the prepared workflow for debugging
     console.log('Prepared workflow:', JSON.stringify(n8nWorkflow, null, 2))
 
-    // Step 3: Create workflow in n8n
-    const createWorkflowUrl = `${n8nUrl.origin}/rest/workflows`
+    // Step 4: Create workflow in n8n using API key (only API key authentication supported)
+    const createWorkflowUrl = `${n8nUrl.origin}/api/v1/workflows`
+    
+    console.log('Creating workflow at:', createWorkflowUrl)
     
     let createResponse: Response
     try {
       createResponse = await fetch(createWorkflowUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Cookie': sessionCookie,
-        },
+        headers: authHeaders,
         body: JSON.stringify(n8nWorkflow),
       })
     } catch (error) {
@@ -285,30 +334,17 @@ export async function POST(request: NextRequest) {
 
       if (createResponse.status === 401) {
         return NextResponse.json(
-          { error: 'Session expired. Please try again.' },
+          { error: 'Invalid API key. Please check your n8n API key.' },
           { status: 401 }
         )
       } else if (createResponse.status === 400) {
         // Log detailed error for debugging
         console.error('400 Error details:', errorText)
         
-        // Check for specific error types
-        if (errorText.includes('property option')) {
-          return NextResponse.json(
-            { error: `Property option error: Some node parameters have invalid values. ${errorMessage}` },
-            { status: 400 }
-          )
-        } else if (errorText.includes('workflow')) {
-          return NextResponse.json(
-            { error: `Workflow validation error: ${errorMessage}` },
-            { status: 400 }
-          )
-        } else {
-          return NextResponse.json(
-            { error: `Invalid workflow data: ${errorMessage}` },
-            { status: 400 }
-          )
-        }
+        return NextResponse.json(
+          { error: `Invalid workflow data: ${errorMessage}` },
+          { status: 400 }
+        )
       } else {
         return NextResponse.json(
           { error: `Workflow creation failed: ${errorMessage}` },
@@ -318,22 +354,41 @@ export async function POST(request: NextRequest) {
     }
 
     const workflowResult: N8nWorkflowResponse = await createResponse.json()
+    
+    // Log the actual response structure for debugging
+    console.log('n8n API Response:', JSON.stringify(workflowResult, null, 2))
+    
+    // Handle different response formats - n8n API might return data directly or wrapped in 'data'
+    const workflowData = workflowResult.data || workflowResult
+    const workflowId = workflowData.id
+    const workflowName = workflowData.name
+    
+    if (!workflowId) {
+      console.error('No workflow ID found in response:', workflowResult)
+      return NextResponse.json(
+        { error: 'Workflow created but no ID returned from n8n. Please check your n8n instance logs.' },
+        { status: 500 }
+      )
+    }
+    
+    console.log('Created workflow with ID:', workflowId, 'Name:', workflowName)
 
-    // Step 4: Optionally activate the workflow if it was active
-    if (workflow.active && workflowResult.data?.id) {
+    // Step 5: Activate the workflow if it should be active
+    if (shouldActivate && workflowId) {
       try {
-        const activateUrl = `${n8nUrl.origin}/rest/workflows/${workflowResult.data.id}/activate`
+        const activateUrl = `${n8nUrl.origin}/api/v1/workflows/${workflowId}/activate`
+        
+        console.log('Activating workflow at:', activateUrl)
+        
         const activateResponse = await fetch(activateUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Cookie': sessionCookie,
-          },
+          headers: authHeaders,
         })
 
         if (!activateResponse.ok) {
           console.warn('Failed to activate workflow, but creation was successful')
+        } else {
+          console.log('Workflow activated successfully')
         }
       } catch (error) {
         console.warn('Error activating workflow:', error)
@@ -341,46 +396,125 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verify workflow was created by fetching it back
-    let verificationResult = null
-    if (workflowResult.data?.id) {
-      // Wait a bit for n8n to process the workflow
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+    // Step 6: Add tags if needed (after workflow creation)
+    if (workflow.tags && Array.isArray(workflow.tags) && workflow.tags.length > 0 && workflowId) {
       try {
-        const fetchUrl = `${n8nUrl.origin}/rest/workflows/${workflowResult.data.id}`
-        console.log('Verifying workflow at:', fetchUrl)
+        const updateUrl = `${n8nUrl.origin}/api/v1/workflows/${workflowId}`
         
-        const fetchResponse = await fetch(fetchUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Cookie': sessionCookie,
-          },
+        console.log('Adding tags to workflow:', workflow.tags)
+        
+        const updateResponse = await fetch(updateUrl, {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify({ tags: workflow.tags }),
         })
-        
-        if (fetchResponse.ok) {
-          verificationResult = await fetchResponse.json()
-          console.log('Workflow verification successful')
+
+        if (!updateResponse.ok) {
+          console.warn('Failed to add tags to workflow, but creation was successful')
         } else {
-          const errorText = await fetchResponse.text()
-          console.warn('Could not verify workflow creation:', fetchResponse.status, errorText)
+          console.log('Tags added successfully')
         }
       } catch (error) {
-        console.warn('Error verifying workflow:', error)
+        console.warn('Error adding tags to workflow:', error)
+        // Don't fail the entire deployment if tag addition fails
+      }
+    }
+
+    // Step 7: Verify workflow was created and is accessible
+    let verificationResult = null
+    let workflowAccessible = false
+    
+    if (workflowId) {
+      // Wait a bit for n8n to process the workflow
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Try multiple approaches to verify workflow access
+      const verificationMethods = [
+        `${n8nUrl.origin}/api/v1/workflows/${workflowId}`,
+        `${n8nUrl.origin}/api/v1/workflows/${workflowId}?includeData=true`,
+      ]
+      
+      for (const fetchUrl of verificationMethods) {
+        try {
+          console.log('Verifying workflow access at:', fetchUrl)
+          
+          const fetchResponse = await fetch(fetchUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'X-N8N-API-KEY': credentials.apiKey!,
+              'Content-Type': 'application/json'
+            },
+          })
+          
+          if (fetchResponse.ok) {
+            verificationResult = await fetchResponse.json()
+            workflowAccessible = true
+            console.log('Workflow verification successful - workflow is accessible via', fetchUrl)
+            break
+          } else {
+            const errorText = await fetchResponse.text()
+            console.warn(`Could not verify workflow access via ${fetchUrl}:`, fetchResponse.status, errorText)
+            
+            if (fetchResponse.status === 404) {
+              console.error('Workflow created but not accessible - possible ownership issue')
+            }
+          }
+        } catch (error) {
+          console.warn(`Error verifying workflow via ${fetchUrl}:`, error)
+        }
+      }
+      
+      // If direct access fails, try listing all workflows to see if it appears there
+      if (!workflowAccessible) {
+        try {
+          console.log('Trying to find workflow in user\'s workflow list...')
+          const listResponse = await fetch(`${n8nUrl.origin}/api/v1/workflows`, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'X-N8N-API-KEY': credentials.apiKey!
+            },
+          })
+          
+          if (listResponse.ok) {
+            const workflowsList = await listResponse.json()
+            const foundWorkflow = workflowsList.data?.find((wf: any) => wf.id === workflowId)
+            if (foundWorkflow) {
+              console.log('Workflow found in user\'s workflow list:', foundWorkflow)
+              workflowAccessible = true
+              verificationResult = foundWorkflow
+            } else {
+              console.error('Workflow not found in user\'s workflow list - ownership issue confirmed')
+            }
+          }
+        } catch (error) {
+          console.warn('Error checking workflow list:', error)
+        }
       }
     }
 
     // Success response
-    return NextResponse.json({
+    const responseData = {
       success: true,
-      message: 'Workflow deployed successfully',
-      workflowId: workflowResult.data?.id,
-      workflowName: workflowResult.data?.name,
-      n8nUrl: `${n8nUrl.origin}/workflow/${workflowResult.data?.id}`,
-      editUrl: `${n8nUrl.origin}/workflows/${workflowResult.data?.id}`,
+      message: workflowAccessible 
+        ? 'Workflow deployed successfully' 
+        : 'Workflow deployed but may have accessibility issues',
+      workflowId: workflowId,
+      workflowName: workflowName || workflow.name,
+      n8nUrl: workflowAccessible 
+        ? `${n8nUrl.origin}/workflow/${workflowId}` 
+        : `${n8nUrl.origin}/workflows`, // Fallback to workflows list
+      editUrl: `${n8nUrl.origin}/workflow/${workflowId}`,
+      fallbackUrl: `${n8nUrl.origin}/workflows`, // Always provide fallback to workflows list
       verified: !!verificationResult,
-    })
+      accessible: workflowAccessible,
+      warning: !workflowAccessible ? 'Workflow created but may not be directly accessible. Try accessing it from the workflows list in n8n.' : undefined
+    }
+    
+    console.log('Deployment response:', responseData)
+    
+    return NextResponse.json(responseData)
 
   } catch (error) {
     console.error('Deployment error:', error)

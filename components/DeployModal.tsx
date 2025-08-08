@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { N8nWorkflow } from '@/store/workflowStore'
 import WorkflowValidator, { validateWorkflow, ValidationResult } from './WorkflowValidator'
 
@@ -20,8 +19,7 @@ interface DeployModalProps {
 
 interface DeploymentCredentials {
   hostUrl: string
-  email: string
-  password: string
+  apiKey: string
 }
 
 
@@ -29,8 +27,7 @@ interface DeploymentCredentials {
 export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onError }: DeployModalProps) {
   const [credentials, setCredentials] = useState<DeploymentCredentials>({
     hostUrl: 'http://localhost:5678',
-    email: '',
-    password: ''
+    apiKey: ''
   })
   const [showPassword, setShowPassword] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
@@ -48,9 +45,15 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
 
   const handleDeploy = async () => {
     // Validate form
-    if (!credentials.hostUrl || !credentials.email || !credentials.password) {
+    if (!credentials.hostUrl) {
       setDeploymentStatus('error')
-      setDeploymentMessage('Please fill in all required fields')
+      setDeploymentMessage('Please enter the n8n host URL')
+      return
+    }
+
+    if (!credentials.apiKey) {
+      setDeploymentStatus('error')
+      setDeploymentMessage('Please enter your n8n API key')
       return
     }
 
@@ -86,8 +89,7 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
           workflow,
           credentials: {
             hostUrl: credentials.hostUrl,
-            email: credentials.email,
-            password: credentials.password
+            apiKey: credentials.apiKey
           }
         }),
       })
@@ -97,7 +99,13 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
       if (response.ok) {
         setDeploymentStatus('success')
         setDeploymentResult(result)
-        const successMessage = `Workflow "${workflow.name}" deployed successfully to n8n!`
+        
+        // Create appropriate success message based on accessibility
+        let successMessage = `Workflow "${workflow.name}" deployed successfully to n8n!`
+        if (result.warning) {
+          successMessage += ` Note: ${result.warning}`
+        }
+        
         setDeploymentMessage(successMessage)
         
         // Call success callback
@@ -106,7 +114,10 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
         }
         
         // Clear sensitive data
-        setCredentials(prev => ({ ...prev, password: '' }))
+        setCredentials(prev => ({ 
+          ...prev, 
+          apiKey: ''
+        }))
         
         // Don't auto-close, let user manually close
       } else {
@@ -135,7 +146,7 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
 
   const handleClose = () => {
     // Clear sensitive data when closing
-    setCredentials(prev => ({ ...prev, password: '' }))
+    setCredentials(prev => ({ ...prev, apiKey: '' }))
     setDeploymentStatus('idle')
     setDeploymentMessage('')
     setDeploymentResult(null)
@@ -151,9 +162,9 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
       
       {/* Modal */}
-      <div className="relative w-full max-w-md sm:max-w-lg bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto mx-4">
+      <div className="relative w-full max-w-md sm:max-w-lg bg-card border border-border rounded-lg shadow-xl max-h-[90vh] overflow-y-auto mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
               deploymentStatus === 'success' 
@@ -166,11 +177,11 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
                 <Upload className="h-5 w-5 text-white" />
               )}
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                {deploymentStatus === 'success' ? '🎉 Deployment Successful' : 'Deploy to n8n'}
+            <div className="text-left">
+              <h2 className="text-xl font-bold text-foreground text-left">
+                {deploymentStatus === 'success' ? '🎉 Deployment Successful' : 'Deploy Workflow to n8n'}
               </h2>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground text-left">
                 {deploymentStatus === 'success' 
                   ? 'Your workflow is now live and ready to use' 
                   : 'Deploy your workflow to n8n instance'
@@ -178,7 +189,7 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleClose}>
+          <Button variant="ghost" size="sm" onClick={handleClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -186,20 +197,20 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Workflow Info - Always show */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 mb-2">Workflow Details</h3>
+          <div className="bg-muted/30 border border-border rounded-lg p-4">
+            <h3 className="font-medium text-foreground mb-2">Workflow Details</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500">Name:</span>
-                <span className="font-medium">{workflow.name}</span>
+                <span className="text-muted-foreground">Name:</span>
+                <span className="font-medium text-foreground">{workflow.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Nodes:</span>
-                <span className="font-medium">{workflow.nodes.length}</span>
+                <span className="text-muted-foreground">Nodes:</span>
+                <span className="font-medium text-foreground">{workflow.nodes.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Connections:</span>
-                <span className="font-medium">{Object.keys(workflow.connections || {}).length}</span>
+                <span className="text-muted-foreground">Connections:</span>
+                <span className="font-medium text-foreground">{Object.keys(workflow.connections || {}).length}</span>
               </div>
             </div>
           </div>
@@ -217,13 +228,13 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
               {/* n8n Connection Settings */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Server className="h-4 w-4 text-gray-500" />
-                  <h3 className="font-medium text-gray-900">n8n Instance</h3>
+                  <Server className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-medium text-foreground">n8n Instance</h3>
                 </div>
 
                 {/* Host URL */}
                 <div className="space-y-2">
-                  <Label htmlFor="host-url" className="text-sm font-medium">
+                  <Label htmlFor="host-url" className="text-sm font-medium text-foreground">
                     n8n Host URL <span className="text-red-500">*</span>
                   </Label>
                   <Input
@@ -232,50 +243,40 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
                     value={credentials.hostUrl}
                     onChange={(e) => setCredentials(prev => ({ ...prev, hostUrl: e.target.value }))}
                     placeholder="http://localhost:5678"
-                    className="font-mono text-sm"
+                    className="font-mono text-sm bg-background border-border text-foreground"
                   />
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     Enter the full URL of your n8n instance (e.g., http://localhost:5678 or https://your-n8n.com)
                   </p>
                 </div>
 
-                {/* Email */}
+                {/* n8n API Key */}
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium">
-                    Email <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={credentials.email}
-                    onChange={(e) => setCredentials(prev => ({ ...prev, email: e.target.value }))}
-                    placeholder="your-email@example.com"
-                  />
-                </div>
-
-                {/* Password */}
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium">
-                    Password <span className="text-red-500">*</span>
+                  <Label htmlFor="api-key" className="text-sm font-medium text-foreground">
+                    n8n API Key <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
                     <Input
-                      id="password"
+                      id="api-key"
                       type={showPassword ? 'text' : 'password'}
-                      value={credentials.password}
-                      onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder="Your n8n password"
+                      value={credentials.apiKey}
+                      onChange={(e) => setCredentials(prev => ({ ...prev, apiKey: e.target.value }))}
+                      placeholder="n8n_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="font-mono text-sm bg-background border-border text-foreground"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="absolute right-0 top-0 h-full px-3"
+                      className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Create an API key in n8n: Settings → n8n API → Create API Key
+                  </p>
                 </div>
               </div>
 
@@ -292,55 +293,96 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
 
           {/* Deployment Status */}
           {deploymentStatus === 'success' && deploymentResult && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                <div className="flex-1">
-                  <h4 className="text-lg font-semibold text-green-900 mb-3">
-                    🎉 Deployment Successful!
+            <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg p-6">
+              <div className="text-center space-y-4">
+                <div className="flex justify-center">
+                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                </div>
+                
+                <div className="space-y-3">
+                  <h4 className="text-xl font-bold text-green-900 dark:text-green-100 text-center">
+                    🎉 Deployment Successful
                   </h4>
-                  <p className="text-green-800 mb-3 text-base leading-relaxed">
-                    Your workflow <strong>"{workflow.name}"</strong> has been successfully deployed to n8n.
-                  </p>
                   
-                  <p className="text-sm text-green-600">
-                    💡 Use the "Open in n8n" button below to access your workflow
-                  </p>
+                  <div className="text-center">
+                    <p className="text-green-800 dark:text-green-200 text-base leading-relaxed max-w-md mx-auto break-words">
+                      Workflow <strong className="font-semibold">"{workflow.name}"</strong> deployed successfully to n8n!
+                    </p>
+                  </div>
+                  
+                  <div className="pt-2 text-center">
+                    <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                      💡 Click "Open in n8n" below to access your workflow
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {deploymentStatus === 'error' && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="text-left">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{deploymentMessage}</AlertDescription>
+              <AlertDescription className="font-medium">
+                {deploymentMessage}
+              </AlertDescription>
             </Alert>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-200 flex gap-3">
+        <div className="p-6 border-t border-border">
           {deploymentStatus === 'success' ? (
             // Success state buttons
-            <>
-              <Button variant="outline" onClick={handleClose} className="flex-1">
+            <div className="space-y-3">
+              {deploymentResult?.n8nUrl && deploymentResult.n8nUrl.indexOf('undefined') === -1 && (
+                <div className="space-y-2">
+                  <Button 
+                    onClick={() => {
+                      console.log('Opening n8n URL:', deploymentResult.n8nUrl)
+                      window.open(deploymentResult.n8nUrl, '_blank')
+                    }}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2.5"
+                    size="lg"
+                  >
+                    <Server className="h-5 w-5 mr-2" />
+                    {deploymentResult.accessible === false ? 'View Workflows in n8n' : 'Open in n8n'}
+                  </Button>
+                  
+                  {deploymentResult.accessible === false && deploymentResult.fallbackUrl && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-yellow-600 dark:text-yellow-400 text-center">
+                        ⚠️ Direct workflow access may not work. Try the workflows list instead.
+                      </p>
+                      <Button 
+                        onClick={() => {
+                          console.log('Opening n8n workflows list:', deploymentResult.fallbackUrl)
+                          window.open(deploymentResult.fallbackUrl, '_blank')
+                        }}
+                        variant="outline"
+                        className="w-full"
+                        size="sm"
+                      >
+                        <Server className="h-4 w-4 mr-2" />
+                        Open Workflows List
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {(!deploymentResult?.n8nUrl || deploymentResult.n8nUrl.indexOf('undefined') !== -1) && (
+                <div className="text-sm text-amber-600 dark:text-amber-400 text-center p-3 bg-amber-50 dark:bg-amber-950/20 rounded-md">
+                  ⚠️ Workflow deployed successfully, but the n8n URL is not available. Please check your n8n instance manually.
+                </div>
+              )}
+              <Button variant="outline" onClick={handleClose} className="w-full">
                 <X className="h-4 w-4 mr-2" />
                 Close
               </Button>
-              {deploymentResult?.n8nUrl && (
-                <Button 
-                  onClick={() => window.open(deploymentResult.n8nUrl, '_blank')}
-                  className="flex-1"
-                >
-                  <Server className="h-4 w-4 mr-2" />
-                  Open in n8n
-                </Button>
-              )}
-            </>
+            </div>
           ) : (
             // Default state buttons
-            <>
+            <div className="flex gap-3">
               <Button variant="outline" onClick={handleClose} className="flex-1">
                 Cancel
               </Button>
@@ -361,7 +403,7 @@ export default function DeployModal({ workflow, isOpen, onClose, onSuccess, onEr
                   </>
                 )}
               </Button>
-            </>
+            </div>
           )}
         </div>
       </div>

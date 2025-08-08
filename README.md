@@ -1,29 +1,56 @@
-# agen8 vibe coding platform - n8n Workflow Generator
+# AGEN8 - AI-Powered n8n Workflow Generator
 
-An AI-powered fullstack web platform that generates n8n workflow JSON files from natural language prompts. Built with Next.js, React, and multiple LLM providers.
+A professional-grade platform for generating n8n workflows from natural language prompts using AI automation.
 
-## Features
+## 🚀 Features
 
-- 🤖 **AI-Powered Generation**: Convert natural language descriptions into valid n8n workflows
-- 🎨 **Live Visualization**: Real-time workflow preview with interactive node graph
-- 📝 **JSON Editor**: Monaco-based editor with syntax highlighting and validation
-- 🔄 **Multiple LLM Providers**: Support for OpenAI, Groq, and Google Gemini
-- 📤 **Easy Export**: Download workflows or integrate with n8n instances
-- 🎯 **Interactive UI**: Modern, responsive design with Tailwind CSS
+- **AI-Powered Workflow Generation**: Create complex n8n workflows using natural language
+- **Visual Workflow Editor**: Interactive drag-and-drop interface with React Flow
+- **Code Generation**: Export workflows as JSON for n8n
+- **Direct n8n Integration**: Deploy workflows directly to your n8n instance
+- **Memory System**: Persistent conversation memory with Supabase
+- **Multiple LLM Providers**: Support for OpenAI, Gemini, Claude, and Mistral
+- **Dark/Light Mode**: Professional UI with theme switching
+- **Responsive Design**: Works on desktop and mobile devices
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 ### Frontend
 - **Next.js 14** - React framework with App Router
 - **React Flow** - Interactive workflow visualization
-- **Monaco Editor** - Code editor for JSON editing
+- **Monaco Editor** - Advanced code editor for JSON
 - **Tailwind CSS** - Utility-first CSS framework
+- **Radix UI** - Professional component library
 - **Zustand** - State management
-- **React Hot Toast** - Notifications
 
 ### Backend
 - **Next.js API Routes** - Serverless API endpoints
-- **Multiple LLM APIs** - OpenAI, Groq, Google Gemini integration
+- **Supabase** - PostgreSQL database and authentication
+- **Multiple LLM APIs** - OpenAI, Gemini, Claude, Mistral integration
+
+## 📁 Project Structure
+
+```
+agen8/
+├── app/                    # Next.js app directory
+│   ├── api/               # API routes
+│   ├── globals.css        # Global styles
+│   ├── layout.tsx         # Root layout
+│   └── page.tsx           # Main page
+├── components/            # React components
+│   ├── ui/               # UI components (Radix UI)
+│   ├── ChatInterface.tsx # AI chat interface
+│   ├── CodeEditor.tsx    # Workflow code editor
+│   ├── DeployModal.tsx   # n8n deployment modal
+│   └── ...               # Other components
+├── database/             # Database setup and migrations
+├── docs/                 # Documentation
+├── hooks/                # Custom React hooks
+├── lib/                  # Utility libraries
+├── public/               # Static assets
+├── scripts/              # Build and deployment scripts
+└── store/                # State management
+```
 
 ## Getting Started
 

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
-import { Settings as SettingsIcon, User, Key, Brain, Database } from 'lucide-react'
+import { Settings as SettingsIcon, Key, Brain } from 'lucide-react'
 
 export default function Settings() {
   const { 

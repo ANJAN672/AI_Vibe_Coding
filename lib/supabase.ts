@@ -65,7 +65,7 @@ export class WorkflowMemory {
 
   static async saveWorkflow(sessionId: string, userId: string, workflow: any): Promise<boolean> {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('chat_workflows')
         .upsert({
           session_id: sessionId,
@@ -92,7 +92,7 @@ export class WorkflowMemory {
     try {
       console.log('🔄 Creating new session:', { sessionId, userId, sessionName })
       
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('chat_workflows')
         .insert({
           session_id: sessionId,
@@ -328,7 +328,7 @@ export class WorkflowMemory {
       
       for (const pattern of workflowNamePatterns) {
         const workflowNameMatch = assistantMessages.match(pattern)
-        if (workflowNameMatch) {
+        if (workflowNameMatch && workflowNameMatch[1]) {
           const workflowName = workflowNameMatch[1].trim()
           if (workflowName && !workflowName.toLowerCase().includes('welcome')) {
             console.log(`✅ Extracted workflow name from chat: "${workflowName}"`)
@@ -339,7 +339,7 @@ export class WorkflowMemory {
       
       // Look for workflow descriptions in assistant messages
       const workflowDescMatch = assistantMessages.match(/Generated Workflow:\s*([^\n]+)/i)
-      if (workflowDescMatch) {
+      if (workflowDescMatch && workflowDescMatch[1]) {
         const desc = workflowDescMatch[1].trim()
         if (desc && !desc.toLowerCase().includes('welcome')) {
           console.log(`✅ Extracted workflow description: "${desc}"`)
@@ -349,7 +349,7 @@ export class WorkflowMemory {
       
       // Extract action-object patterns from user messages
       const actionObjectPattern = userMessages.match(/\b(build|create|make|setup)\s+(a\s+)?([^,\.]+?(?:workflow|automation|process|system|integration))/i)
-      if (actionObjectPattern) {
+      if (actionObjectPattern && actionObjectPattern[3]) {
         let title = actionObjectPattern[3].trim()
         title = title.replace(/^(a|an|the)\s+/i, '') // Remove articles
         title = title.charAt(0).toUpperCase() + title.slice(1)
@@ -359,7 +359,7 @@ export class WorkflowMemory {
       
       // Look for "containing" patterns that describe workflow components
       const containingMatch = userMessages.match(/\b(?:containing|with|including)\s+([^\.!]+)/i)
-      if (containingMatch) {
+      if (containingMatch && containingMatch[1]) {
         const components = containingMatch[1]
           .split(/\s*(?:,|and|then|\+)\s*/)
           .slice(0, 3) // Take first 3 components

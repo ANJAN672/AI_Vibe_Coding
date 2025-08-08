@@ -7,29 +7,19 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
-  Send, 
   Bot, 
   User,
   Loader2,
   Sparkles,
   ArrowUp,
-  MessageCircle,
-  PanelLeftClose,
   Zap,
   Brain,
-  History,
-  ChevronDown,
   FileText,
-  Code,
-  Play
+  History
 } from 'lucide-react'
 import { SessionSidebar } from './SessionSidebar'
 
-interface ChatInterfaceProps {
-  onToggleSidebar?: () => void
-}
-
-export function ChatInterface({ onToggleSidebar }: ChatInterfaceProps) {
+export function ChatInterface() {
   const { 
     sessionId, 
     userId, 
@@ -171,7 +161,7 @@ I've successfully created your "${workflow.name}" automation with ${workflow.nod
 ✅ Error Handling: Built-in safeguards for reliable execution
 
 Key Components:
-${workflow.nodes?.map((node, index) => 
+${workflow.nodes?.map((node) => 
   `• ${node.name} - ${node.type.replace('n8n-nodes-base.', '').replace(/([A-Z])/g, ' $1').trim()} functionality`
 ).join('\n') || '• No nodes configured yet'}
 
@@ -189,72 +179,6 @@ Optimize Workflow Performance • Preview Latest
       }
     } catch (error) {
       console.error('Error generating brief explanation:', error)
-    } finally {
-      setIsExplaining(false)
-    }
-  }
-
-  const generateStreamingExplanation = async () => {
-    if (!workflow || !hasApiKey || selectedModel !== 'gemini') return
-    
-    const startTime = Date.now()
-    setIsExplaining(true)
-    setStreamingExplanation('')
-    
-    try {
-      // Calculate realistic processing time based on workflow complexity
-      const nodeCount = workflow.nodes?.length || 0
-      const connectionCount = Object.keys(workflow.connections || {}).length
-      const complexity = nodeCount + connectionCount
-      
-      // Simulate realistic analysis time (1-5 seconds based on complexity)
-      const processingTime = Math.max(1000, Math.min(5000, complexity * 300))
-      await new Promise(resolve => setTimeout(resolve, processingTime))
-      
-      const endTime = Date.now()
-      const actualDuration = Math.round((endTime - startTime) / 1000)
-      const durationText = actualDuration < 60 
-        ? `${actualDuration}s` 
-        : `${Math.floor(actualDuration / 60)}m ${actualDuration % 60}s`
-      
-      const explanation = `
-AGEN8
-Analyzed for ${durationText} • ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} on ${new Date().toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}
-
-I'll help you analyze and optimize your "${workflow.name || 'Untitled Workflow'}" automation. Let me examine the workflow structure and suggest improvements.
-
-Show all
-${workflow.nodes?.length || 0} nodes analyzed
-
-I've successfully analyzed your workflow with ${workflow.nodes?.length || 0} components and ${Object.keys(workflow.connections || {}).length} connections. Here's what I found:
-
-✅ Workflow Structure: Your automation follows a clean sequential pattern
-✅ Node Configuration: All ${workflow.nodes?.length || 0} components are properly connected  
-✅ Data Flow: Information passes smoothly between nodes
-✅ Error Handling: Built-in safeguards for robust execution
-✅ Scalability: Designed to handle varying data volumes efficiently
-
-Key Components Identified:
-${workflow.nodes?.map((node, index) => 
-  `• ${node.name} - ${node.type.replace('n8n-nodes-base.', '').replace(/([A-Z])/g, ' $1').trim()} functionality`
-).join('\n') || '• No nodes configured yet'}
-
-The workflow is optimized for automated processing with real-time execution capabilities. Each node represents a specific business function that integrates seamlessly with your existing systems.
-
-RestoreCode
-Optimize Workflow Performance • Preview Latest
-
-This automation will help streamline your business processes and reduce manual work significantly.
-      `.trim()
-
-      // Simulate streaming by revealing text gradually
-      const words = explanation.split(' ')
-      for (let i = 0; i < words.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 30))
-        setStreamingExplanation(words.slice(0, i + 1).join(' '))
-      }
-    } catch (error) {
-      console.error('Failed to generate explanation:', error)
     } finally {
       setIsExplaining(false)
     }
@@ -338,10 +262,12 @@ This automation will help streamline your business processes and reduce manual w
         setStreamingExplanation('')
         
         // Simulate streaming for the chat response
-        const words = chatResponse.split(' ')
-        for (let i = 0; i < words.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 50))
-          setStreamingExplanation(words.slice(0, i + 1).join(' '))
+        if (chatResponse) {
+          const words = chatResponse.split(' ')
+          for (let i = 0; i < words.length; i++) {
+            await new Promise(resolve => setTimeout(resolve, 50))
+            setStreamingExplanation(words.slice(0, i + 1).join(' '))
+          }
         }
         setIsExplaining(false)
       }

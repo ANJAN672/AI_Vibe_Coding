@@ -10,16 +10,15 @@ import Settings from '@/components/Settings'
 import { ChatInterface } from '@/components/ChatInterface'
 import { useWorkflowStore } from '@/store/workflowStore'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
-import { Menu, X, Upload, Brain, Code2, Play, History, PanelLeftClose, PanelLeft, MessageCircle, User, Settings as SettingsIcon, Github, Zap, Sun, Moon } from 'lucide-react'
+import { PanelLeftClose, PanelLeft, User, Github, Zap, Sun, Moon, Play, Code2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import DeployModal from '@/components/DeployModal'
 import { ToastContainer, useToast } from '@/components/Toast'
-import SupabaseTest from '@/components/SupabaseTest'
 import Image from 'next/image'
 
 export default function Home() {
-  const { workflow, isMemoryEnabled, sessionId, startNewSession, toggleMemory } = useWorkflowStore()
+  const { workflow, isMemoryEnabled, sessionId, startNewSession } = useWorkflowStore()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('preview')
@@ -208,7 +207,7 @@ export default function Home() {
                 maxSize={40}
                 className="bg-card border-r border-border"
               >
-                <ChatInterface onToggleSidebar={handleToggleSidebar} />
+                <ChatInterface />
               </Panel>
               <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
             </>
@@ -262,12 +261,9 @@ export default function Home() {
         workflow={workflow}
         isOpen={isDeployModalOpen}
         onClose={() => setIsDeployModalOpen(false)}
-        onSuccess={(message) => toast.success('Deployment Successful', message)}
-        onError={(message) => toast.error('Deployment Failed', message)}
+        onSuccess={(message) => toast.success('🎉 Deployment Successful', message)}
+        onError={(message) => toast.error('❌ Deployment Failed', message)}
       />
-
-      {/* Supabase Connection Test */}
-      <SupabaseTest />
 
       {/* Toast Notifications */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />

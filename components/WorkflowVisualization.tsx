@@ -5,7 +5,6 @@ import {
   ReactFlow,
   ReactFlowProvider, 
   Background, 
-  Controls, 
   Node, 
   Edge,
   useNodesState,
@@ -24,9 +23,9 @@ import {
   ConnectionMode
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useWorkflowStore, N8nNode, N8nConnection, N8nWorkflow } from '@/store/workflowStore'
+import { useWorkflowStore, N8nNode } from '@/store/workflowStore'
 import NodeEditor from './NodeEditor'
-import WorkflowValidator, { validateWorkflow, ValidationResult } from './WorkflowValidator'
+import WorkflowValidator, { ValidationResult } from './WorkflowValidator'
 
 // Custom node component with enhanced styling and information
 const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => {
@@ -99,7 +98,6 @@ const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => {
     return typeColors[type] || { bg: '#f8fafc', border: '#64748b', text: '#334155' }
   }
 
-  const colors = getNodeColor(data.type, data.disabled)
   const nodeTypeName = data.type.split('.').pop() || 'Unknown'
   
   // Get node category icon
@@ -298,7 +296,7 @@ const CustomNode = ({ data, selected }: { data: any; selected: boolean }) => {
 
 // Component that uses React Flow hooks - must be inside ReactFlow
 const FlowControls = () => {
-  const { fitView, zoomIn, zoomOut, getNodes, setNodes } = useReactFlow()
+  const { fitView, getNodes, setNodes } = useReactFlow()
   const [showMiniMap, setShowMiniMap] = useState(true)
   
   // Auto-arrange nodes in a better layout
@@ -440,7 +438,6 @@ function WorkflowVisualizationInner() {
   const [isNodeEditorOpen, setIsNodeEditorOpen] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [isSpacePressed, setIsSpacePressed] = useState(false)
-  const [showMiniMap, setShowMiniMap] = useState(false)
   const reactFlowInstance = useReactFlow()
 
   // Spacebar + scroll zoom functionality
@@ -564,6 +561,7 @@ function WorkflowVisualizationInner() {
         reactFlowWrapper.removeEventListener('wheel', handleWheel)
       }
     }
+    return undefined
   }, [handleWheel])
 
   // Node edit handlers
@@ -583,8 +581,9 @@ function WorkflowVisualizationInner() {
       updatedWorkflow.nodes[nodeIndex] = updatedNode
       
       // Update connections if node name changed
-      const oldName = workflow.nodes[nodeIndex].name
-      if (oldName !== updatedNode.name) {
+      const oldNode = workflow.nodes[nodeIndex]
+      const oldName = oldNode?.name
+      if (oldName && oldName !== updatedNode.name) {
         // Update connections where this node is the source
         if (updatedWorkflow.connections[oldName]) {
           updatedWorkflow.connections[updatedNode.name] = updatedWorkflow.connections[oldName]
@@ -594,15 +593,20 @@ function WorkflowVisualizationInner() {
         // Update connections where this node is the target
         Object.keys(updatedWorkflow.connections).forEach(sourceName => {
           const sourceConnections = updatedWorkflow.connections[sourceName]
-          Object.keys(sourceConnections).forEach(outputType => {
-            sourceConnections[outputType].forEach(connectionArray => {
-              connectionArray.forEach(connection => {
-                if (connection.node === oldName) {
-                  connection.node = updatedNode.name
-                }
-              })
+          if (sourceConnections) {
+            Object.keys(sourceConnections).forEach(outputType => {
+              const outputConnections = sourceConnections[outputType]
+              if (outputConnections) {
+                outputConnections.forEach(connectionArray => {
+                  connectionArray.forEach(connection => {
+                    if (connection.node === oldName) {
+                      connection.node = updatedNode.name
+                    }
+                  })
+                })
+              }
             })
-          })
+          }
         })
       }
       
@@ -696,7 +700,6 @@ function WorkflowVisualizationInner() {
       })
 
       const reactFlowEdges: Edge[] = []
-      const processedConnections = new Set<string>()
       
       // ALWAYS CREATE SEQUENTIAL CONNECTIONS - This ensures every workflow is fully connected
       if (reactFlowNodes.length > 1) {
@@ -705,24 +708,26 @@ function WorkflowVisualizationInner() {
           const sourceNode = reactFlowNodes[i]
           const targetNode = reactFlowNodes[i + 1]
           
-          reactFlowEdges.push({
-            id: `auto-${sourceNode.id}-${targetNode.id}`,
-            source: sourceNode.id,
-            target: targetNode.id,
-            type: 'smoothstep',
-            animated: true,
-            style: {
-              stroke: '#4f46e5',
-              strokeWidth: 2,
-              opacity: 0.8,
-            },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: '#4f46e5',
-              width: 10,
-              height: 10,
-            },
-          })
+          if (sourceNode && targetNode) {
+            reactFlowEdges.push({
+              id: `auto-${sourceNode.id}-${targetNode.id}`,
+              source: sourceNode.id,
+              target: targetNode.id,
+              type: 'smoothstep',
+              animated: true,
+              style: {
+                stroke: '#4f46e5',
+                strokeWidth: 2,
+                opacity: 0.8,
+              },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: '#4f46e5',
+                width: 10,
+                height: 10,
+              },
+            })
+          }
         }
       }
 
@@ -830,16 +835,19 @@ function WorkflowVisualizationInner() {
             updatedWorkflow.connections[sourceNode.name] = {}
           }
           
-          if (!updatedWorkflow.connections[sourceNode.name].main) {
-            updatedWorkflow.connections[sourceNode.name].main = []
+          const sourceConnection = updatedWorkflow.connections[sourceNode.name]
+          if (sourceConnection && !sourceConnection.main) {
+            sourceConnection.main = []
           }
           
           // Add new connection
-          updatedWorkflow.connections[sourceNode.name].main.push([{
-            node: targetNode.name,
-            type: 'main',
-            index: 0
-          }])
+          if (sourceConnection && sourceConnection.main) {
+            sourceConnection.main.push([{
+              node: targetNode.name,
+              type: 'main',
+              index: 0
+            }])
+          }
           
           setWorkflow(updatedWorkflow)
         }
@@ -859,11 +867,14 @@ function WorkflowVisualizationInner() {
           const nodeIndex = workflow.nodes.findIndex(n => n.id === change.id)
           if (nodeIndex !== -1) {
             const updatedWorkflow = { ...workflow }
-            updatedWorkflow.nodes[nodeIndex] = {
-              ...updatedWorkflow.nodes[nodeIndex],
-              position: [change.position.x, change.position.y]
+            const existingNode = updatedWorkflow.nodes[nodeIndex]
+            if (existingNode) {
+              updatedWorkflow.nodes[nodeIndex] = {
+                ...existingNode,
+                position: [change.position.x, change.position.y]
+              }
+              setWorkflow(updatedWorkflow)
             }
-            setWorkflow(updatedWorkflow)
           }
         }
       })
@@ -1013,25 +1024,28 @@ function WorkflowVisualizationInner() {
             height: 10
           }
         }}
-        onNodeDragStop={(event, node) => {
+        onNodeDragStop={(_event, node) => {
           // Ensure position is updated in the workflow store
           if (workflow) {
             const nodeIndex = workflow.nodes.findIndex(n => n.id === node.id)
             if (nodeIndex !== -1) {
               const updatedWorkflow = { ...workflow }
-              updatedWorkflow.nodes[nodeIndex] = {
-                ...updatedWorkflow.nodes[nodeIndex],
-                position: [node.position.x, node.position.y]
+              const existingNode = updatedWorkflow.nodes[nodeIndex]
+              if (existingNode) {
+                updatedWorkflow.nodes[nodeIndex] = {
+                  ...existingNode,
+                  position: [node.position.x, node.position.y]
+                }
+                setWorkflow(updatedWorkflow)
               }
-              setWorkflow(updatedWorkflow)
             }
           }
         }}
-        onConnectStart={(event, { nodeId, handleType }) => {
+        onConnectStart={(_event, { nodeId, handleType }) => {
           // Visual feedback when starting to connect
           console.log('Connection started from:', nodeId, handleType)
         }}
-        onConnectEnd={(event) => {
+        onConnectEnd={(_event) => {
           // Visual feedback when connection ends
           console.log('Connection ended')
         }}

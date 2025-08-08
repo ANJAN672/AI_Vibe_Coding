@@ -5,8 +5,7 @@ import { useWorkflowStore } from '@/store/workflowStore'
 import { WorkflowMemory, ChatWorkflow } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { 
-  MessageCircle, 
-  Plus, 
+  MessageCircle,
   Edit2, 
   Trash2, 
   Check, 

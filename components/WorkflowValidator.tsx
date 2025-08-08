@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
-import { N8nWorkflow, N8nNode } from '@/store/workflowStore'
+import { N8nWorkflow } from '@/store/workflowStore'
 import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -293,7 +293,7 @@ export default function WorkflowValidator({
 
   if (!showVisualFeedback) return null
 
-  const { isValid, errors, warnings } = validationResult
+  const { errors, warnings } = validationResult
 
   if (errors.length === 0 && warnings.length === 0) {
     return (
